@@ -98,3 +98,80 @@ python crawler/main.py run --spider retailer_x
 # 8) (Optional) UI
 # Streamlit: streamlit run ui/App.py
 # Next.js: cd ui && npm i && npm run dev
+```
+---
+
+# 🚀 Running the App (Backend + Frontend)
+
+Follow these steps to launch both the FastAPI backend and the Streamlit frontend locally.
+
+
+
+## 🧩 1. Activate the Virtual Environment
+
+```powershell
+. .\.venv\Scripts\Activate.ps1
+```
+
+💡 **If PowerShell blocks the command**, temporarily allow it:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+---
+
+## ⚙️ 2. Start the FastAPI Backend
+
+Open a new terminal (**Terminal #1**):
+
+```powershell
+# Add src/ to Python's module search path
+$env:PYTHONPATH = (Join-Path (Get-Location) "src")
+
+# Run FastAPI with Uvicorn
+uvicorn beautycrawler.api.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Once running, verify it in your browser:
+- **http://localhost:8000/healthz** → should return `{"status":"ok"}`
+- **http://localhost:8000/api/products?q=serum** → returns sample data
+
+**Keep this terminal open and running.**
+
+---
+
+## 💻 3. Start the Streamlit Frontend
+
+Open another new terminal (**Terminal #2**):
+
+```powershell
+. .\.venv\Scripts\Activate.ps1
+streamlit run ui/App.py
+```
+
+Streamlit will automatically open in your browser:
+- **Local URL:** http://localhost:8501
+
+Search for products (e.g., "serum", "lipstick", "PureSkin") and you'll see matching results from the API.
+
+---
+
+## 🛑 4. Stop the App
+
+To shut down:
+- Press **`Ctrl + C`** in the FastAPI terminal to stop the backend
+- Press **`Ctrl + C`** in the Streamlit terminal to stop the frontend
+
+---
+
+## ⚡ Quick Troubleshooting
+
+| Issue | Likely Cause | Fix |
+|-------|--------------|-----|
+| `uvicorn : The term 'uvicorn' is not recognized` | You forgot to activate the virtual env | Run `. .\.venv\Scripts\Activate.ps1` |
+| `WinError 10061: Connection refused` | API not running or wrong port | Make sure backend is running on port `8000` |
+| `ModuleNotFoundError: beautycrawler` | Python path missing `src/` | Add `$env:PYTHONPATH = (Join-Path (Get-Location) "src")` before running |
+| Streamlit opens but no results | API crashed or wrong base URL | Ensure both terminals stay open and `API_BASE` in `ui/App.py` matches backend port |
+
+---
