@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator, Iterator
 import httpx
 import pytest
 import respx
+from conftest import UA, FakeTime
 
 from beautycrawler.config import Settings
 from beautycrawler.crawler.fetcher import (
@@ -15,41 +16,8 @@ from beautycrawler.crawler.fetcher import (
     _retry_after_seconds,
 )
 
-UA = "BeautyCrawlerTest/1.0 (+https://example.org/bot)"
 SHOP = "https://shop.example.ro"
 ROBOTS = "User-agent: *\nDisallow: /cos\nDisallow: /cont/\n"
-
-
-class FakeTime:
-    """Monotonic clock that only advances when the fetcher sleeps."""
-
-    def __init__(self) -> None:
-        self.now = 1000.0
-        self.sleeps: list[float] = []
-
-    def clock(self) -> float:
-        return self.now
-
-    async def sleep(self, seconds: float) -> None:
-        self.sleeps.append(round(seconds, 6))
-        self.now += seconds
-
-
-@pytest.fixture
-def settings() -> Settings:
-    return Settings(
-        user_agent=UA,
-        request_delay_seconds=2.0,
-        max_retries=2,
-        retry_backoff_seconds=1.0,
-        robots_cache_ttl_seconds=3600,
-        _env_file=None,  # type: ignore[call-arg]
-    )
-
-
-@pytest.fixture
-def fake_time() -> FakeTime:
-    return FakeTime()
 
 
 @pytest.fixture

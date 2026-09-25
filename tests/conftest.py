@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from beautycrawler.api.main import app
 from beautycrawler.api.routers import products
+from beautycrawler.config import Settings
 from beautycrawler.db import Base
 from beautycrawler.db.session import make_engine, make_session_factory
 
@@ -41,3 +42,39 @@ def engine() -> Iterator[Engine]:
 def session(engine: Engine) -> Iterator[Session]:
     with make_session_factory(engine)() as s:
         yield s
+
+
+UA = "BeautyCrawlerTest/1.0 (+https://example.org/bot)"
+
+
+class FakeTime:
+    """Monotonic clock that only advances when the fetcher sleeps."""
+
+    def __init__(self) -> None:
+        self.now = 1000.0
+        self.sleeps: list[float] = []
+
+    def clock(self) -> float:
+        return self.now
+
+    async def sleep(self, seconds: float) -> None:
+        self.sleeps.append(round(seconds, 6))
+        self.now += seconds
+
+
+@pytest.fixture
+def settings() -> Settings:
+    """Crawler settings for fetcher/spider tests (independent of env and .env)."""
+    return Settings(
+        user_agent=UA,
+        request_delay_seconds=2.0,
+        max_retries=2,
+        retry_backoff_seconds=1.0,
+        robots_cache_ttl_seconds=3600,
+        _env_file=None,  # type: ignore[call-arg]
+    )
+
+
+@pytest.fixture
+def fake_time() -> FakeTime:
+    return FakeTime()

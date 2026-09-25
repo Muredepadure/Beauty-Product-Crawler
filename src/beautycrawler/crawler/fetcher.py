@@ -60,6 +60,7 @@ class FetchResult:
     status_code: int
     text: str
     headers: httpx.Headers
+    content: bytes = b""
 
     @property
     def ok(self) -> bool:
@@ -162,6 +163,7 @@ class PoliteFetcher:
                 status_code=response.status_code,
                 text=response.text,
                 headers=response.headers,
+                content=response.content,
             )
         raise FetchError(url, f"more than {MAX_REDIRECTS} redirects")
 
@@ -172,6 +174,13 @@ class PoliteFetcher:
         if robots.parser is None:
             return False
         return robots.parser.can_fetch(self.settings.user_agent, url)
+
+    async def sitemaps(self, url: str) -> list[str]:
+        """`Sitemap:` URLs listed in the robots.txt of `url`'s site."""
+        robots = await self._get_robots(_origin(url))
+        if robots.parser is None:
+            return []
+        return list(robots.parser.site_maps() or [])
 
     async def crawl_delay(self, url: str) -> float:
         """Seconds to wait between requests to this URL's host."""
