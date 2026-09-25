@@ -42,7 +42,7 @@ Candidate "top 10" by traffic and market position. Task P3.1 verifies each one
 ## Phase 2 — Extraction core
 
 - [x] **P2.1** `ScrapedOffer` Pydantic model (the spider output contract).
-- [ ] **P2.2** Generic JSON-LD `Product`/`Offer` extractor (`extractors/jsonld.py`) with fixtures covering: single offer, multiple variants, missing GTIN, price as string with comma decimals.
+- [x] **P2.2** Generic JSON-LD `Product`/`Offer` extractor (`extractors/jsonld.py`) with fixtures covering: single offer, multiple variants, missing GTIN, price as string with comma decimals.
 - [x] **P2.3** Romanian price parser: "1.234,99 lei", "49,90 RON", "de la 30 lei", old/new price pairs; exhaustive unit tests.
 - [ ] **P2.4** Polite HTTP fetcher: robots.txt check (cached), per-domain rate limit, retries with backoff, custom UA, timeout. Tested with `respx`.
 - [ ] **P2.5** `Spider` base interface: `discover()` (category/listing/sitemap → product URLs) and `parse_product(html, url) -> ScrapedOffer`.
