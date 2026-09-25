@@ -13,13 +13,13 @@ your session ends. Commit and push often so an interrupted session loses little.
 ## 1. Orient (keep this short)
 
 1. Read `CLAUDE.md` (rules and stack), `ROADMAP.md` (tasks), and the top 3 entries of `NIGHTLY_LOG.md`.
-2. Check open pull requests from `nightly/*` branches, and read any review comments the owner left on them.
+2. Check open pull requests from `claude/nightly-*` branches, and read any review comments the owner left on them.
    - If the owner requested changes on an open nightly PR, address those **first**, on that PR's branch, and push.
 3. Choose your base branch:
-   - If there is an unmerged `nightly/*` PR, branch from the **newest** unmerged nightly branch
+   - If there is an unmerged `claude/nightly-*` PR, branch from the **newest** unmerged nightly branch
      (so work continues on top of it). Say "Builds on #N" in your PR description.
    - Otherwise branch from `origin/main`.
-4. Create `nightly/<YYYY-MM-DD>-<first-task-id>` (e.g. `nightly/2026-09-26-P0.1`).
+4. Create `claude/nightly-<YYYY-MM-DD>-<first-task-id>` (e.g. `claude/nightly-2026-09-26-P0.1`; cloud runs may only push `claude/` branches).
 
 ## 2. Work loop
 

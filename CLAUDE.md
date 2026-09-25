@@ -45,7 +45,7 @@ pytest -q
    robots.txt or terms forbid crawling product pages, do not build a spider for it —
    record it in `ROADMAP.md` and move on.
 4. **Never commit secrets** (`.env` is gitignored; document variables in `.env.example`).
-5. **Never push to `main` directly.** Work on `nightly/*` branches and open pull requests.
+5. **Never push to `main` directly.** Work on `claude/nightly-*` branches and open pull requests.
 6. **Never bypass bot protection** (CAPTCHAs, Cloudflare challenges, fingerprint evasion).
    If a site blocks plain polite requests, mark it blocked and skip it.
 7. Keep changes small and focused; one roadmap task per commit series.
