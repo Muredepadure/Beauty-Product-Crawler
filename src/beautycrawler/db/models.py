@@ -1,7 +1,7 @@
 """Core data model.
 
 - `Retailer`: a tracked shop (notino.ro, ...).
-- `Brand`: canonical brand; `normalized_name` is the matching key (see P4.1).
+- `Brand`: canonical brand; `normalized_name` is `normalization.brands.brand_key()`.
 - `Product`: canonical item across retailers (brand + name + size, EAN when known).
 - `Offer`: one retailer's listing (URL) with its latest price and stock. `product_id` is
   nullable because offers are stored as scraped and linked to a `Product` by matching (P4.4).

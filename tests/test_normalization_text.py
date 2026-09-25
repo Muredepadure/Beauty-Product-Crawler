@@ -6,7 +6,7 @@ from beautycrawler.normalization.text import fold
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
-        ("L’Oréal Paris", "l'oreal paris"),  # noqa: RUF001 (typographic apostrophe on purpose)
+        ("L’Oréal Paris", "l'oreal paris"),
         ("L'OREAL   PARIS", "l'oreal paris"),
         ("  Cremă  de  zi ", "crema de zi"),
         ("șțȘȚ", "stst"),  # comma-below ș ț Ș Ț

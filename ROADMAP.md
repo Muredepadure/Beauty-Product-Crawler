@@ -66,7 +66,7 @@ Each spider task: parser + fixture tests + discovery (prefer sitemaps) + a `--li
 
 ## Phase 4 — Normalization & matching
 
-- [ ] **P4.1** Brand normalization: alias map (e.g. "L'Oreal Paris" / "L’Oréal" → `L'Oréal Paris`), diacritics/case folding.
+- [x] **P4.1** Brand normalization: alias map (e.g. "L'Oreal Paris" / "L’Oréal" → `L'Oréal Paris`), diacritics/case folding.
 - [ ] **P4.2** Size/unit parsing from titles: ml, l, g, kg, buc; multipacks ("2 x 50 ml").
 - [ ] **P4.3** Title cleanup: strip retailer noise ("Promo", "-20%", gift mentions).
 - [ ] **P4.4** Product matching: 1) EAN/GTIN exact; 2) brand + normalized name + size with `rapidfuzz` threshold; ambiguous matches go to a review table rather than auto-merging. Tests with realistic cross-retailer pairs.

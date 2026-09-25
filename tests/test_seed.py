@@ -30,7 +30,7 @@ def test_seed_populates_retailers_and_demo(session: Session) -> None:
     notino = session.scalars(select(Retailer).where(Retailer.slug == "notino")).one()
     assert (notino.domain, notino.is_active) == ("notino.ro", True)
     loreal = session.scalars(select(Brand).where(Brand.name == "L'Oréal Paris")).one()
-    assert loreal.normalized_name == "l'oreal paris"
+    assert loreal.normalized_name == "loreal paris"  # brand_key()
 
 
 def test_seed_is_idempotent(session: Session) -> None:

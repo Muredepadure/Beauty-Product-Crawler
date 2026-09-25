@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from beautycrawler.db.models import Brand, Product, Retailer
+from beautycrawler.normalization.brands import brand_key, canonical_brand
 from beautycrawler.normalization.text import fold
 
 # (slug, name, domain) — keep in sync with the retailer table in ROADMAP.md.
@@ -59,10 +60,11 @@ def seed_demo_products(session: Session) -> tuple[int, int]:
     brands = {b.normalized_name: b for b in session.scalars(select(Brand))}
     existing = {(p.brand_id, p.normalized_name) for p in session.scalars(select(Product))}
     brands_added = products_added = 0
-    for brand_name, name, size, unit, category in DEMO_PRODUCTS:
-        brand = brands.get(fold(brand_name))
+    for raw_brand, name, size, unit, category in DEMO_PRODUCTS:
+        brand_name = canonical_brand(raw_brand) or raw_brand
+        brand = brands.get(brand_key(brand_name))
         if brand is None:
-            brand = Brand(name=brand_name, normalized_name=fold(brand_name))
+            brand = Brand(name=brand_name, normalized_name=brand_key(brand_name))
             session.add(brand)
             session.flush()
             brands[brand.normalized_name] = brand
