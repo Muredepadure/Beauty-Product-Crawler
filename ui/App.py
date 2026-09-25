@@ -1,4 +1,4 @@
-﻿import httpx
+import httpx
 import streamlit as st
 
 API_BASE = "http://localhost:8000/api"
@@ -16,7 +16,12 @@ with col3:
     limit = st.number_input("Results per page", min_value=1, max_value=100, value=24, step=1)
 
 if st.button("Search") or q or brand or category:
-    params = {"q": q or None, "brand": brand or None, "category": category or None, "limit": int(limit)}
+    params = {
+        "q": q or None,
+        "brand": brand or None,
+        "category": category or None,
+        "limit": int(limit),
+    }
     with httpx.Client(timeout=15.0) as client:
         r = client.get(f"{API_BASE}/products", params=params)
         r.raise_for_status()
@@ -29,6 +34,6 @@ if st.button("Search") or q or brand or category:
         with cols[i % 3]:
             st.image(p.get("image_url"), use_column_width=True)
             st.markdown(f"**{p['name']}**")
-            st.caption(f"{p['brand']} • {p.get('category','')}")
+            st.caption(f"{p['brand']} • {p.get('category', '')}")
             st.markdown(f"**{p['price']} {p['currency']}**")
             st.link_button("Go to provider", p["provider"])

@@ -1,21 +1,2 @@
-fastapi
-uvicorn[standard]
-pydantic-settings
-sqlalchemy
-psycopg[binary]
-alembic
-httpx[http2]
-beautifulsoup4
-selectolax
-extruct
-lxml
-rapidfuzz
-streamlit
-pytest
-pytest-asyncio
-respx
-ruff
-black
-mypy
-pre-commit
-python-dotenv
+# Dependencies live in pyproject.toml. This file only exists for tools that expect it.
+-e .[dev]
