@@ -53,7 +53,7 @@ known-first-party = ["beautycrawler"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["src"]
+files = ["src", "scripts"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]

@@ -37,7 +37,7 @@ Candidate "top 10" by traffic and market position. Task P3.1 verifies each one
 - [x] **P1.1** SQLAlchemy models: `Retailer`, `Brand`, `Product` (canonical item: brand, name, size, unit, EAN), `Offer` (product × retailer: URL, current price, stock), `PriceHistory` (offer, price, old price, in_stock, scraped_at). Prices in bani.
 - [x] **P1.2** Alembic setup + initial migration; test that `upgrade head` works on a fresh SQLite DB.
 - [x] **P1.3** Repository/service layer: upsert offer, append price history only when price or stock changes; unit tests.
-- [ ] **P1.4** Seed script (`scripts/seed.py`) that loads the retailers table and a few demo products.
+- [x] **P1.4** Seed script (`scripts/seed.py`) that loads the retailers table and a few demo products.
 
 ## Phase 2 — Extraction core
 

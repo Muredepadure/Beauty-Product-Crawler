@@ -57,6 +57,7 @@ Create the database schema (default `DATABASE_URL` is a local SQLite file,
 
 ```bash
 alembic upgrade head
+python scripts/seed.py             # tracked retailers + a few demo products (idempotent)
 ```
 
 After changing models in `src/beautycrawler/db/models.py`, generate a migration with
@@ -86,7 +87,7 @@ streamlit run ui/App.py            # http://localhost:8501
 
 ```bash
 ruff check . && ruff format --check .
-mypy src
+mypy src scripts
 pytest -q
 ```
 
@@ -125,6 +126,7 @@ What exists today:
 │   ├── data/products.json       # bundled demo dataset
 │   └── config.py                # pydantic-settings configuration
 ├── ui/App.py                    # Streamlit UI
+├── scripts/seed.py              # seed retailers + demo products
 ├── tests/                       # pytest suite (no network)
 ├── .github/workflows/ci.yml     # lint, type-check, tests
 ├── alembic.ini                  # Alembic config (URL comes from DATABASE_URL)
