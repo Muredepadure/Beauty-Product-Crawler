@@ -29,7 +29,7 @@ Candidate "top 10" by traffic and market position. Task P3.1 verifies each one
 - [x] **P0.2** Add `pyproject.toml` (package metadata, `[dev]` extra, ruff/mypy/pytest config); make `pip install -e ".[dev]"` work; keep `requirements.txt` in sync or remove it.
 - [x] **P0.3** First tests: `/healthz`, `/api/products` search/filter/pagination (FastAPI `TestClient`).
 - [x] **P0.4** GitHub Actions CI: lint, mypy, pytest on every push/PR.
-- [ ] **P0.5** `src/beautycrawler/config.py` with `pydantic-settings` (`DATABASE_URL`, user agent, delays); `.env.example`.
+- [x] **P0.5** `src/beautycrawler/config.py` with `pydantic-settings` (`DATABASE_URL`, user agent, delays); `.env.example`.
 - [ ] **P0.6** Rewrite README "Quick Start"/"Project Structure" to match reality (src layout, SQLite default).
 
 ## Phase 1 — Data model
