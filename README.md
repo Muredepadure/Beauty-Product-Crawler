@@ -75,6 +75,17 @@ uvicorn beautycrawler.api.main:app --reload --port 8000
   (params: `q`, `brand`, `category`, `limit` 1–100, `offset`)
 - http://localhost:8000/docs → OpenAPI docs
 
+### Run a crawl
+
+```bash
+python -m beautycrawler.crawler list                          # registered spiders
+python -m beautycrawler.crawler run --retailer notino --limit 20
+python -m beautycrawler.crawler run --all
+```
+
+Offers are upserted into the database; price history gets a row only when price or
+stock changes. No retailer spiders exist yet (see Phase 3 in `ROADMAP.md`).
+
 ### Run the UI
 
 In a second terminal (API must be running):
@@ -87,7 +98,7 @@ streamlit run ui/App.py            # http://localhost:8501
 
 ```bash
 ruff check . && ruff format --check .
-mypy src scripts
+mypy src scripts tests
 pytest -q
 ```
 

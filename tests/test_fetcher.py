@@ -184,9 +184,12 @@ async def test_concurrent_requests_to_one_host_are_serialized(
     robots(mock)
     sent: list[float] = []
     loop = asyncio.get_running_loop()
-    mock.get(url__startswith=f"{SHOP}/p/").mock(
-        side_effect=lambda request: sent.append(loop.time()) or httpx.Response(200)
-    )
+
+    def record(request: httpx.Request) -> httpx.Response:
+        sent.append(loop.time())
+        return httpx.Response(200)
+
+    mock.get(url__startswith=f"{SHOP}/p/").mock(side_effect=record)
     async with PoliteFetcher(fast) as f:
         await asyncio.gather(*(f.fetch(f"{SHOP}/p/{i}") for i in range(4)))
     gaps = [b - a for a, b in itertools.pairwise(sent)]

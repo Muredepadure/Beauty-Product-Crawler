@@ -71,7 +71,7 @@ def settings() -> Settings:
         max_retries=2,
         retry_backoff_seconds=1.0,
         robots_cache_ttl_seconds=3600,
-        _env_file=None,  # type: ignore[call-arg]
+        _env_file=None,
     )
 
 

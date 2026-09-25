@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import Engine, inspect, select
+from sqlalchemy import Engine, delete, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -124,8 +124,8 @@ def test_deleting_offer_deletes_history_at_db_level(session: Session, notino: Re
     offer.history.append(PriceHistory(price_bani=8999, in_stock=True))
     session.add(offer)
     session.commit()
-    # Delete via Core so only the DB's ON DELETE CASCADE (FKs enabled on SQLite) can clean up.
-    session.execute(Offer.__table__.delete())
+    # Bulk delete (no ORM cascade): only the DB's ON DELETE CASCADE can remove history.
+    session.execute(delete(Offer))
     session.commit()
     assert session.scalars(select(PriceHistory)).all() == []
 
@@ -134,7 +134,7 @@ def test_deleting_product_unlinks_offers(session: Session, notino: Retailer) -> 
     product = Product(name="P", normalized_name="p")
     session.add(make_offer(notino, product=product))
     session.commit()
-    session.execute(Product.__table__.delete())
+    session.execute(delete(Product))
     session.commit()
     session.expire_all()
     assert session.scalars(select(Offer)).one().product_id is None

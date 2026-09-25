@@ -60,7 +60,7 @@ Candidate "top 10" by traffic and market position. Task P3.1 verifies each one
 - [!] **P3.9** _Blocked on P3.1 (no fixtures / robots.txt check possible yet)._ Spider: Parfimo
 - [!] **P3.10** _Blocked on P3.1 (no fixtures / robots.txt check possible yet)._ Spider: Elefant
 - [!] **P3.11** _Blocked on P3.1 (no fixtures / robots.txt check possible yet)._ Spider: eMAG (marketplace: record seller name per offer)
-- [ ] **P3.12** Crawl CLI: `python -m beautycrawler.crawler run --retailer notino [--limit N]` and `run --all`; writes to DB via P1.3.
+- [x] **P3.12** Crawl CLI: `python -m beautycrawler.crawler run --retailer notino [--limit N]` and `run --all`; writes to DB via P1.3.
 
 Each spider task: parser + fixture tests + discovery (prefer sitemaps) + a `--limit` smoke path. Skip and mark `[!]` if P3.1 says crawling is not allowed or not possible.
 
