@@ -49,17 +49,17 @@ Candidate "top 10" by traffic and market position. Task P3.1 verifies each one
 
 ## Phase 3 — Retailer spiders
 
-- [ ] **P3.1** Retailer audit: for each of the 10 retailers, record in this file robots.txt rules for product pages, sitemap availability, whether JSON-LD is present, and whether plain HTTP works. Update the status column. Save one product page per allowed retailer as a fixture (only if the sandbox has network access; otherwise note it and ask the owner to add fixtures).
-- [ ] **P3.2** Spider: Notino
-- [ ] **P3.3** Spider: Sephora
-- [ ] **P3.4** Spider: Douglas
-- [ ] **P3.5** Spider: Makeup.ro
-- [ ] **P3.6** Spider: dm
-- [ ] **P3.7** Spider: Farmacia Tei
-- [ ] **P3.8** Spider: Dr.Max
-- [ ] **P3.9** Spider: Parfimo
-- [ ] **P3.10** Spider: Elefant
-- [ ] **P3.11** Spider: eMAG (marketplace: record seller name per offer)
+- [!] **P3.1** _Blocked 2026-09-25: the nightly cloud environment's network policy denies the retailer domains (proxy CONNECT 403 for notino.ro, emag.ro, sephora.ro, dm.ro). Owner: allow these domains in the environment's Network access settings, or run the audit locally and commit fixtures._ Retailer audit: for each of the 10 retailers, record in this file robots.txt rules for product pages, sitemap availability, whether JSON-LD is present, and whether plain HTTP works. Update the status column. Save one product page per allowed retailer as a fixture (only if the sandbox has network access; otherwise note it and ask the owner to add fixtures).
+- [!] **P3.2** _Blocked on P3.1 (no fixtures / robots.txt check possible yet)._ Spider: Notino
+- [!] **P3.3** _Blocked on P3.1 (no fixtures / robots.txt check possible yet)._ Spider: Sephora
+- [!] **P3.4** _Blocked on P3.1 (no fixtures / robots.txt check possible yet)._ Spider: Douglas
+- [!] **P3.5** _Blocked on P3.1 (no fixtures / robots.txt check possible yet)._ Spider: Makeup.ro
+- [!] **P3.6** _Blocked on P3.1 (no fixtures / robots.txt check possible yet)._ Spider: dm
+- [!] **P3.7** _Blocked on P3.1 (no fixtures / robots.txt check possible yet)._ Spider: Farmacia Tei
+- [!] **P3.8** _Blocked on P3.1 (no fixtures / robots.txt check possible yet)._ Spider: Dr.Max
+- [!] **P3.9** _Blocked on P3.1 (no fixtures / robots.txt check possible yet)._ Spider: Parfimo
+- [!] **P3.10** _Blocked on P3.1 (no fixtures / robots.txt check possible yet)._ Spider: Elefant
+- [!] **P3.11** _Blocked on P3.1 (no fixtures / robots.txt check possible yet)._ Spider: eMAG (marketplace: record seller name per offer)
 - [ ] **P3.12** Crawl CLI: `python -m beautycrawler.crawler run --retailer notino [--limit N]` and `run --all`; writes to DB via P1.3.
 
 Each spider task: parser + fixture tests + discovery (prefer sitemaps) + a `--limit` smoke path. Skip and mark `[!]` if P3.1 says crawling is not allowed or not possible.
