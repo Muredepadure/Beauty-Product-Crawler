@@ -1,4 +1,3 @@
-from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -7,22 +6,7 @@ from sqlalchemy import Engine, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from beautycrawler.db import Base, Brand, Offer, PriceHistory, Product, Retailer
-from beautycrawler.db.session import make_engine, make_session_factory
-
-
-@pytest.fixture
-def engine() -> Iterator[Engine]:
-    eng = make_engine("sqlite://")
-    Base.metadata.create_all(eng)
-    yield eng
-    eng.dispose()
-
-
-@pytest.fixture
-def session(engine: Engine) -> Iterator[Session]:
-    with make_session_factory(engine)() as s:
-        yield s
+from beautycrawler.db import Brand, Offer, PriceHistory, Product, Retailer
 
 
 @pytest.fixture
