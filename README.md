@@ -1,177 +1,138 @@
-#  BeautyCrawler
+# BeautyCrawler
 
-**BeautyCrawler** is an open-source web crawler and aggregator for beauty and skincare products across online stores.  
-It collects product information — such as names, prices, brands, sizes, and images — and displays them in a clean interface with links to the original providers.
+**BeautyCrawler** is a price-comparison crawler for the **Romanian** beauty market.
+Type a product (e.g. "La Roche-Posay Effaclar Duo 40ml") and see every tracked Romanian
+retailer's current price (RON), stock status and link, plus price history.
 
----
-
-## 🚀 Features
-
-- 🔍 Crawl and extract products from multiple beauty retailers  
-- 🧠 Automatic normalization of brands, sizes, and prices  
-- 💄 Beautiful UI for exploring and filtering products  
-- ⏱️ Scheduled crawling and price updates  
-- 💬 REST API for programmatic access  
-- ⚖️ Data deduplication and price history tracking  
+> Status: early development. The API currently serves a small bundled demo dataset;
+> the database, spiders and normalization are being built phase by phase — see
+> [`ROADMAP.md`](ROADMAP.md) and [`NIGHTLY_LOG.md`](NIGHTLY_LOG.md).
 
 ---
 
-## 🧰 Tech Stack
+## Features (planned)
 
-| Layer | Technology |
-|-------|-------------|
-| **Language** | Python 🐍 |
-| **Crawler** | Scrapy / Playwright / aiohttp |
-| **Backend API** | FastAPI |
-| **Database** | PostgreSQL + SQLAlchemy |
-| **Search** | OpenSearch / Elasticsearch *(optional)* |
-| **Scheduler / Queue** | Celery + Redis |
-| **UI** | Next.js / Streamlit |
-| **Containerization** | Docker + Docker Compose |
+- Crawl product pages from the top Romanian beauty retailers (politely: robots.txt, rate limits)
+- Normalize brands, sizes and prices; match the same product across retailers
+- Price history and price-drop detection
+- REST API (FastAPI) and a Streamlit UI for shoppers and sellers
 
 ---
 
-## 📂 Project Structure
-```
-beautycrawler/
-├── crawler/                    # Crawl jobs, spiders, fetch policies, schedulers
-│   ├── spiders/               # Site-specific spiders (one per merchant)
-│   ├── pipelines.py           # Normalize, dedupe, persist
-│   ├── settings.py            # Scrapy/Playwright settings
-│   └── main.py                # CLI entrypoints to run jobs
-├── extractors/                 # Parsers & helpers (HTML/JSON-LD → Product models)
-├── normalization/              # Brand maps, unit conversion, title cleanup
-├── api/                        # FastAPI application
-│   ├── main.py                # FastAPI app factory & routes
-│   ├── models.py              # Pydantic schemas
-│   ├── deps.py                # DI, DB session wiring
-│   └── routers/               # /products, /brands, /categories
-├── db/                         # Database layer
-│   ├── base.py                # SQLAlchemy/SQLModel base
-│   ├── models.py              # Product, Offer, Merchant, Category, PriceHistory
-│   └── migrations/            # Alembic migrations
-├── ui/                         # Next.js or Streamlit app (choose one)
-├── infra/                      # Infrastructure & deployment
-│   ├── docker/                # Dockerfiles
-│   ├── compose/               # docker-compose.yml
-│   └── ci/                    # GitHub Actions workflows
-├── tests/                      # pytest suites (unit + integration)
-├── scripts/                    # Dev scripts (seed, export, backfill)
-├── .env.example               # Environment variables template
-├── requirements.txt           # Python dependencies (or poetry/uv/pip-tools)
-├── pyproject.toml             # Tooling config (ruff/black/mypy) if used
-├── alembic.ini                # Alembic configuration
-└── README.md
-```
+## Tech stack
 
+| Concern | Choice |
+|---|---|
+| Language | Python 3.12 (`src/beautycrawler/`) |
+| HTTP fetching | `httpx` (async) |
+| Parsing | `selectolax` (HTML), `extruct` (JSON-LD / microdata) |
+| Database | SQLAlchemy 2.x + Alembic; SQLite by default, Postgres via `DATABASE_URL` |
+| API | FastAPI |
+| UI | Streamlit (`ui/`) |
+| Scheduling | CLI command run by cron / GitHub Actions / APScheduler |
+| Tooling | pytest, ruff (lint + format), mypy |
 
+The authoritative version of this table, and the project rules, live in [`CLAUDE.md`](CLAUDE.md).
 
 ---
 
-## ⚙️ Quick Start
+## Quick start
+
+Requires Python 3.12+.
 
 ```bash
-# 1) Clone
-git clone https://github.com/<your-username>/beautycrawler.git
-cd beautycrawler
+git clone https://github.com/Muredepadure/Beauty-Product-Crawler.git
+cd Beauty-Product-Crawler
 
-# 2) Python env
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+source .venv/bin/activate          # Windows PowerShell: . .\.venv\Scripts\Activate.ps1
 
-# 3) Install deps
-pip install -r requirements.txt
+pip install -e ".[dev]"            # app + UI + test/lint tools
 
-# 4) Configure environment
-cp .env.example .env
-# Edit DB creds, Redis, Playwright, etc.
-
-# 5) DB setup
-alembic upgrade head
-
-# 6) Run API (http://localhost:8000/docs)
-uvicorn api.main:app --reload
-
-# 7) Run a crawler job (example)
-python crawler/main.py run --spider retailer_x
-
-# 8) (Optional) UI
-# Streamlit: streamlit run ui/App.py
-# Next.js: cd ui && npm i && npm run dev
-```
----
-
-# 🚀 Running the App (Backend + Frontend)
-
-Follow these steps to launch both the FastAPI backend and the Streamlit frontend locally.
-
-
-
-## 🧩 1. Activate the Virtual Environment
-
-```powershell
-. .\.venv\Scripts\Activate.ps1
+cp .env.example .env               # optional; every setting has a default
 ```
 
-💡 **If PowerShell blocks the command**, temporarily allow it:
+No database setup is needed yet: the default `DATABASE_URL` is a local SQLite file
+(`sqlite:///beautycrawler.db`). Migrations arrive with roadmap task P1.2.
 
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+### Run the API
+
+```bash
+uvicorn beautycrawler.api.main:app --reload --port 8000
+```
+
+- http://localhost:8000/healthz → `{"status": "ok"}`
+- http://localhost:8000/api/products?q=serum → demo search results
+  (params: `q`, `brand`, `category`, `limit` 1–100, `offset`)
+- http://localhost:8000/docs → OpenAPI docs
+
+### Run the UI
+
+In a second terminal (API must be running):
+
+```bash
+streamlit run ui/App.py            # http://localhost:8501
+```
+
+### Checks (same as CI)
+
+```bash
+ruff check . && ruff format --check .
+mypy src
+pytest -q
+```
+
+Tests never touch the network; retailer parsing is tested against saved fixtures.
+
+---
+
+## Configuration
+
+Settings are read from environment variables or `.env` (see [`.env.example`](.env.example)):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `DATABASE_URL` | `sqlite:///beautycrawler.db` | SQLAlchemy URL |
+| `BEAUTYCRAWLER_USER_AGENT` | `BeautyCrawler/0.1 (+repo URL)` | Crawler identity |
+| `BEAUTYCRAWLER_REQUEST_DELAY_SECONDS` | `2.0` (minimum 2) | Delay between requests per domain |
+| `BEAUTYCRAWLER_REQUEST_TIMEOUT_SECONDS` | `30` | HTTP timeout |
+| `BEAUTYCRAWLER_MAX_RETRIES` / `_RETRY_BACKOFF_SECONDS` | `3` / `2.0` | Retry policy |
+| `BEAUTYCRAWLER_ROBOTS_CACHE_TTL_SECONDS` | `86400` | robots.txt cache lifetime |
+| `BEAUTYCRAWLER_API_BASE_URL` | `http://localhost:8000/api` | API URL used by the UI |
+
+---
+
+## Project structure
+
+What exists today:
+
+```
+.
+├── src/beautycrawler/
+│   ├── api/
+│   │   ├── main.py              # FastAPI app, /healthz
+│   │   └── routers/products.py  # /api/products (demo data for now)
+│   ├── crawler/                 # spiders go in crawler/spiders/<retailer>.py (Phase 3)
+│   ├── db/                      # SQLAlchemy models + Alembic (Phase 1)
+│   ├── data/products.json       # bundled demo dataset
+│   └── config.py                # pydantic-settings configuration
+├── ui/App.py                    # Streamlit UI
+├── tests/                       # pytest suite (no network)
+├── .github/workflows/ci.yml     # lint, type-check, tests
+├── pyproject.toml               # package metadata, deps, ruff/mypy/pytest config
+├── .env.example                 # documented environment variables
+├── CLAUDE.md                    # project rules and stack decisions
+├── ROADMAP.md                   # task list and target retailers
+└── NIGHTLY_LOG.md               # log of nightly development runs
 ```
 
 ---
 
-## ⚙️ 2. Start the FastAPI Backend
+## Troubleshooting
 
-Open a new terminal (**Terminal #1**):
-
-```powershell
-# Add src/ to Python's module search path
-$env:PYTHONPATH = (Join-Path (Get-Location) "src")
-
-# Run FastAPI with Uvicorn
-uvicorn beautycrawler.api.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-Once running, verify it in your browser:
-- **http://localhost:8000/healthz** → should return `{"status":"ok"}`
-- **http://localhost:8000/api/products?q=serum** → returns sample data
-
-**Keep this terminal open and running.**
-
----
-
-## 💻 3. Start the Streamlit Frontend
-
-Open another new terminal (**Terminal #2**):
-
-```powershell
-. .\.venv\Scripts\Activate.ps1
-streamlit run ui/App.py
-```
-
-Streamlit will automatically open in your browser:
-- **Local URL:** http://localhost:8501
-
-Search for products (e.g., "serum", "lipstick", "PureSkin") and you'll see matching results from the API.
-
----
-
-## 🛑 4. Stop the App
-
-To shut down:
-- Press **`Ctrl + C`** in the FastAPI terminal to stop the backend
-- Press **`Ctrl + C`** in the Streamlit terminal to stop the frontend
-
----
-
-## ⚡ Quick Troubleshooting
-
-| Issue | Likely Cause | Fix |
-|-------|--------------|-----|
-| `uvicorn : The term 'uvicorn' is not recognized` | You forgot to activate the virtual env | Run `. .\.venv\Scripts\Activate.ps1` |
-| `WinError 10061: Connection refused` | API not running or wrong port | Make sure backend is running on port `8000` |
-| `ModuleNotFoundError: beautycrawler` | Python path missing `src/` | Add `$env:PYTHONPATH = (Join-Path (Get-Location) "src")` before running |
-| Streamlit opens but no results | API crashed or wrong base URL | Ensure both terminals stay open and `API_BASE` in `ui/App.py` matches backend port |
-
----
+| Issue | Fix |
+|---|---|
+| `uvicorn` / `streamlit` not found | Activate the virtualenv first |
+| `ModuleNotFoundError: beautycrawler` | Run `pip install -e ".[dev]"` (no `PYTHONPATH` needed) |
+| UI shows a connection error | Start the API, and check `BEAUTYCRAWLER_API_BASE_URL` / the port |
+| PowerShell refuses to activate the venv | `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` |

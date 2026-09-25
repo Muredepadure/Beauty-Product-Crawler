@@ -1,7 +1,9 @@
 import httpx
 import streamlit as st
 
-API_BASE = "http://localhost:8000/api"
+from beautycrawler.config import get_settings
+
+API_BASE = get_settings().api_base_url.rstrip("/")
 
 st.set_page_config(page_title="Beauty Product Search", layout="wide")
 st.title("🔎 Beauty Product Search")
