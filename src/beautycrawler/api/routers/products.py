@@ -28,8 +28,8 @@ def list_products(
     q: str | None = Query(None, description="Free text search over name/brand"),
     brand: str | None = None,
     category: str | None = None,
-    limit: int = 24,
-    offset: int = 0,
+    limit: int = Query(24, ge=1, le=100),
+    offset: int = Query(0, ge=0),
 ) -> dict[str, Any]:
     items = PRODUCTS
     if q:
