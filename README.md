@@ -52,8 +52,16 @@ pip install -e ".[dev]"            # app + UI + test/lint tools
 cp .env.example .env               # optional; every setting has a default
 ```
 
-No database setup is needed yet: the default `DATABASE_URL` is a local SQLite file
-(`sqlite:///beautycrawler.db`). Migrations arrive with roadmap task P1.2.
+Create the database schema (default `DATABASE_URL` is a local SQLite file,
+`sqlite:///beautycrawler.db`):
+
+```bash
+alembic upgrade head
+```
+
+After changing models in `src/beautycrawler/db/models.py`, generate a migration with
+`alembic revision --autogenerate -m "<what changed>"` and review it; a test fails if models
+and migrations drift apart.
 
 ### Run the API
 
@@ -113,12 +121,13 @@ What exists today:
 │   │   ├── main.py              # FastAPI app, /healthz
 │   │   └── routers/products.py  # /api/products (demo data for now)
 │   ├── crawler/                 # spiders go in crawler/spiders/<retailer>.py (Phase 3)
-│   ├── db/                      # SQLAlchemy models + Alembic (Phase 1)
+│   ├── db/                      # SQLAlchemy models, engine/session, Alembic migrations
 │   ├── data/products.json       # bundled demo dataset
 │   └── config.py                # pydantic-settings configuration
 ├── ui/App.py                    # Streamlit UI
 ├── tests/                       # pytest suite (no network)
 ├── .github/workflows/ci.yml     # lint, type-check, tests
+├── alembic.ini                  # Alembic config (URL comes from DATABASE_URL)
 ├── pyproject.toml               # package metadata, deps, ruff/mypy/pytest config
 ├── .env.example                 # documented environment variables
 ├── CLAUDE.md                    # project rules and stack decisions
