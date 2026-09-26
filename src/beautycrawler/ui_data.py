@@ -1,0 +1,57 @@
+"""Pure helpers that shape API data for the Streamlit UI (kept out of the Streamlit
+script so they are typed and unit-tested)."""
+
+from decimal import Decimal
+
+from beautycrawler.api.schemas import ProductSummary
+from beautycrawler.ui_client import format_lei
+
+SORT_LABELS: dict[str, str] = {
+    "name": "Nume (A-Z)",
+    "price_asc": "Preț crescător",
+    "price_desc": "Preț descrescător",
+    "retailers": "Cele mai multe magazine",
+}
+
+
+def format_size(value: Decimal | None, unit: str | None) -> str:
+    """Decimal("40.000"), "ml" -> "40 ml"; missing -> ""."""
+    if value is None or not unit:
+        return ""
+    return f"{value.normalize():f} {unit}".replace(".", ",")
+
+
+def plural_ro(count: int, one: str, many: str) -> str:
+    """Romanian count + noun: 1 produs, 2 produse, 19 produse, 20 de produse, 101 produse."""
+    if count == 1:
+        return f"1 {one}"
+    if count == 0 or 0 < count % 100 < 20:
+        return f"{count} {many}"
+    return f"{count} de {many}"
+
+
+def stores_label(count: int) -> str:
+    return plural_ro(count, "magazin", "magazine")
+
+
+def products_label(count: int) -> str:
+    return plural_ro(count, "produs", "produse")
+
+
+def card_price_line(product: ProductSummary) -> str:
+    """E.g. "de la 69,90 lei · 3 magazine", or why there's no price."""
+    stores = stores_label(product.retailer_count)
+    if product.lowest_price_bani is not None:
+        return f"de la {format_lei(product.lowest_price_bani)} · {stores}"
+    if product.offer_count:
+        return f"Stoc epuizat · {stores}"
+    return "Fără oferte încă"
+
+
+def card_subtitle(product: ProductSummary) -> str:
+    parts = [product.brand or "", format_size(product.size_value, product.size_unit)]
+    return " · ".join(p for p in parts if p)
+
+
+def page_count(total: int, page_size: int) -> int:
+    return max(1, -(-total // page_size))

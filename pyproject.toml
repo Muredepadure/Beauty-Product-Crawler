@@ -25,7 +25,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-ui = ["streamlit>=1.33"]
+ui = ["streamlit>=1.50"]  # width="stretch" and friends
 dev = [
     "beautycrawler[ui]",
     "pytest>=8.0",
