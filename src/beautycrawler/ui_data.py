@@ -3,7 +3,12 @@ script so they are typed and unit-tested)."""
 
 from decimal import Decimal
 
-from beautycrawler.api.schemas import ProductDetail, ProductHistory, ProductSummary
+from beautycrawler.api.schemas import (
+    BrandComparison,
+    ProductDetail,
+    ProductHistory,
+    ProductSummary,
+)
 from beautycrawler.ui_client import format_lei
 
 SORT_LABELS: dict[str, str] = {
@@ -117,3 +122,72 @@ def lei_to_bani(lei: float | None) -> int | None:
     if not lei or lei <= 0:
         return None
     return round(lei * 100)
+
+
+# --- P7.4 competitor view ------------------------------------------------------------
+
+MARKET_BAND_PCT = 2.0  # within ±2 % of the median counts as "at market"
+
+
+def format_pct(pct: float | None) -> str:
+    """+11.1 -> "+11,1%"; -5.0 -> "-5,0%"; None -> "—"."""
+    if pct is None:
+        return "—"
+    return f"{pct:+.1f}%".replace(".", ",")
+
+
+def market_position(pct_vs_median: float | None, in_stock: bool) -> str:
+    if not in_stock:
+        return "Stoc epuizat"
+    if pct_vs_median is None:
+        return "—"
+    if pct_vs_median < -MARKET_BAND_PCT:
+        return "Sub piață"
+    if pct_vs_median > MARKET_BAND_PCT:
+        return "Peste piață"
+    return "La nivelul pieței"
+
+
+def position_rows(comparison: BrandComparison) -> list[dict[str, object]]:
+    return [
+        {
+            "Magazin": p.retailer.name,
+            "Produse listate": p.products_listed,
+            "Cel mai ieftin la": p.cheapest_count,
+            "Medie față de median": format_pct(p.avg_vs_median_pct),
+        }
+        for p in comparison.retailers
+    ]
+
+
+def retailer_rows(comparison: BrandComparison, retailer_slug: str) -> list[dict[str, object]]:
+    """The retailer's price for each of the brand's products it lists, vs the market."""
+    rows: list[dict[str, object]] = []
+    for product in comparison.products:
+        mine = next((p for p in product.prices if p.retailer.slug == retailer_slug), None)
+        if mine is None:
+            continue
+        rows.append(
+            {
+                "Produs": product.name,
+                "Mărime": format_size(product.size_value, product.size_unit),
+                "Prețul magazinului": format_lei(mine.price_bani),
+                "Minim piață": format_lei(product.market_min_bani),
+                "Median piață": format_lei(product.market_median_bani),
+                "Față de median": format_pct(mine.vs_median_pct),
+                "Poziție": market_position(mine.vs_median_pct, mine.in_stock),
+            }
+        )
+    return rows
+
+
+def matrix_rows(comparison: BrandComparison) -> list[dict[str, object]]:
+    """Product-by-retailer grid of % vs the median (None where not listed / no market)."""
+    names = [p.retailer.name for p in comparison.retailers]
+    rows: list[dict[str, object]] = []
+    for product in comparison.products:
+        row: dict[str, object] = {"Produs": product.name, **dict.fromkeys(names)}
+        for price in product.prices:
+            row[price.retailer.name] = price.vs_median_pct
+        rows.append(row)
+    return rows

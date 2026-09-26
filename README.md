@@ -147,6 +147,13 @@ In a second terminal (API must be running):
 streamlit run ui/App.py            # http://localhost:8501
 ```
 
+Two pages (sidebar): **Caută produse** (search with brand/category/price/stock filters,
+product cards, `?product=<id>` product page with the price table across retailers and
+the price-history chart) and **Comparație prețuri** (seller view: pick a brand, see
+each retailer's position and where a retailer is over/under the market median).
+The UI only talks to the API (`BEAUTYCRAWLER_API_BASE_URL`) through
+`beautycrawler.ui_client`.
+
 ### Checks (same as CI)
 
 ```bash

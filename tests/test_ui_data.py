@@ -3,18 +3,28 @@ from decimal import Decimal
 
 import pytest
 
-from beautycrawler.api.schemas import ProductDetail, ProductHistory, ProductSummary
+from beautycrawler.api.schemas import (
+    BrandComparison,
+    ProductDetail,
+    ProductHistory,
+    ProductSummary,
+)
 from beautycrawler.ui_data import (
     card_price_line,
     card_subtitle,
     discount_pct,
+    format_pct,
     format_size,
     history_rows,
     lei_to_bani,
+    market_position,
+    matrix_rows,
     offer_rows,
     page_count,
     plural_ro,
+    position_rows,
     products_label,
+    retailer_rows,
     stores_label,
 )
 
@@ -189,3 +199,126 @@ def test_history_rows_extend_to_last_seen_and_gap_when_out_of_stock() -> None:
 )
 def test_lei_to_bani(lei: float | None, bani: int | None) -> None:
     assert lei_to_bani(lei) == bani
+
+
+# --- P7.4 helpers ----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("pct", "in_stock", "label"),
+    [
+        (-10.0, True, "Sub piață"),
+        (-2.0, True, "La nivelul pieței"),
+        (0.0, True, "La nivelul pieței"),
+        (2.1, True, "Peste piață"),
+        (None, True, "—"),
+        (-10.0, False, "Stoc epuizat"),
+    ],
+)
+def test_market_position(pct: float | None, in_stock: bool, label: str) -> None:
+    assert market_position(pct, in_stock) == label
+
+
+def test_format_pct() -> None:
+    assert (format_pct(11.1), format_pct(-5.0), format_pct(0.0), format_pct(None)) == (
+        "+11,1%",
+        "-5,0%",
+        "+0,0%",
+        "—",
+    )
+
+
+def _comparison() -> BrandComparison:
+    def price(slug: str, bani: int, vs_median: float | None, in_stock: bool = True) -> object:
+        return {
+            "retailer": {"slug": slug, "name": slug.title()},
+            "price_bani": bani,
+            "in_stock": in_stock,
+            "vs_min_pct": 0.0,
+            "vs_median_pct": vs_median,
+            "is_cheapest": False,
+        }
+
+    return BrandComparison.model_validate(
+        {
+            "brand": "La Roche-Posay",
+            "retailers": [
+                {
+                    "retailer": {"slug": "emag", "name": "Emag"},
+                    "products_listed": 1,
+                    "cheapest_count": 1,
+                    "avg_vs_median_pct": -3.5,
+                },
+                {
+                    "retailer": {"slug": "notino", "name": "Notino"},
+                    "products_listed": 2,
+                    "cheapest_count": 0,
+                    "avg_vs_median_pct": None,
+                },
+            ],
+            "total": 2,
+            "page": 1,
+            "page_size": 100,
+            "products": [
+                {
+                    "product_id": 1,
+                    "name": "Effaclar Duo+",
+                    "size_value": "40",
+                    "size_unit": "ml",
+                    "market_min_bani": 7_450,
+                    "market_median_bani": 7_720,
+                    "prices": [price("emag", 7_450, -3.5), price("notino", 7_990, 3.5)],
+                },
+                {
+                    "product_id": 2,
+                    "name": "Cicaplast",
+                    "size_value": None,
+                    "size_unit": None,
+                    "market_min_bani": None,
+                    "market_median_bani": None,
+                    "prices": [price("notino", 5_500, None, in_stock=False)],
+                },
+            ],
+        }
+    )
+
+
+def test_position_rows() -> None:
+    assert position_rows(_comparison()) == [
+        {
+            "Magazin": "Emag",
+            "Produse listate": 1,
+            "Cel mai ieftin la": 1,
+            "Medie față de median": "-3,5%",
+        },
+        {
+            "Magazin": "Notino",
+            "Produse listate": 2,
+            "Cel mai ieftin la": 0,
+            "Medie față de median": "—",
+        },
+    ]
+
+
+def test_retailer_rows_skip_unlisted_products() -> None:
+    comparison = _comparison()
+    assert [r["Produs"] for r in retailer_rows(comparison, "emag")] == ["Effaclar Duo+"]
+    notino = retailer_rows(comparison, "notino")
+    assert notino[0] == {
+        "Produs": "Effaclar Duo+",
+        "Mărime": "40 ml",
+        "Prețul magazinului": "79,90 lei",
+        "Minim piață": "74,50 lei",
+        "Median piață": "77,20 lei",
+        "Față de median": "+3,5%",
+        "Poziție": "Peste piață",
+    }
+    assert notino[1]["Poziție"] == "Stoc epuizat"
+    assert retailer_rows(comparison, "sephora") == []
+
+
+def test_matrix_rows() -> None:
+    assert matrix_rows(_comparison()) == [
+        {"Produs": "Effaclar Duo+", "Emag": -3.5, "Notino": 3.5},
+        {"Produs": "Cicaplast", "Emag": None, "Notino": None},
+    ]

@@ -237,3 +237,50 @@ def test_in_stock_only(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
     assert "Hydrating Cleanser" in card_names(at)
     at.checkbox(key="in_stock").check().run()
     assert card_names(at) == ["Cicaplast Baume B5+", "Effaclar Duo+"]
+
+
+# --- P7.4: competitor view -------------------------------------------------------------
+
+
+def open_competitors() -> AppTest:
+    at = run_app()
+    at.radio(key="nav").set_value("🏷️ Comparație prețuri").run()
+    assert not at.exception
+    return at
+
+
+def test_competitor_view(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    at = open_competitors()
+    assert at.title[0].value == "🏷️ Comparație prețuri"
+    at.selectbox(key="cmp_brand").select("La Roche-Posay").run()
+    positions, matrix, detail = (d.value for d in at.dataframe)
+
+    # duo: emag 74,50 / notino 79,90 -> median 77,20; cica: notino 55 / emag 65 -> median 60
+    assert list(positions["Magazin"]) == ["eMAG", "Notino"]
+    assert list(positions["Cel mai ieftin la"]) == [1, 1]
+    assert list(matrix["Produs"]) == ["Cicaplast Baume B5+", "Effaclar Duo+"]
+    assert list(matrix["eMAG"]) == [8.3, -3.5]
+    assert list(matrix["Notino"]) == [-8.3, 3.5]
+
+    assert at.selectbox(key="cmp_store").value == "eMAG"
+    assert list(detail["Produs"]) == ["Cicaplast Baume B5+", "Effaclar Duo+"]
+    assert list(detail["Prețul magazinului"]) == ["65,00 lei", "74,50 lei"]
+    assert list(detail["Median piață"]) == ["60,00 lei", "77,20 lei"]
+    assert list(detail["Poziție"]) == ["Peste piață", "Sub piață"]
+    assert "**eMAG**: 1 sub piață, 1 peste piață, din 2 listate." in markdown(at)
+
+    at.selectbox(key="cmp_store").select("Notino").run()
+    assert list(at.dataframe[2].value["Poziție"]) == ["Sub piață", "Peste piață"]
+
+
+def test_competitor_view_out_of_stock_brand(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    at = open_competitors()
+    at.selectbox(key="cmp_brand").select("CeraVe").run()
+    detail = at.dataframe[2].value
+    assert list(detail["Poziție"]) == ["Stoc epuizat"]
+    assert list(detail["Median piață"]) == ["—"]
+
+
+def test_competitor_view_without_brands(ui_api: respx.MockRouter) -> None:
+    at = open_competitors()
+    assert "Nu există încă branduri" in at.info[0].value

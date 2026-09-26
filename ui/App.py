@@ -16,14 +16,19 @@ import streamlit as st
 from beautycrawler.api.schemas import ProductDetail, ProductSummary
 from beautycrawler.ui_client import ApiClient, ApiError, NotFound
 from beautycrawler.ui_data import (
+    MARKET_BAND_PCT,
     SORT_LABELS,
     card_price_line,
     card_subtitle,
+    format_pct,
     history_rows,
     lei_to_bani,
+    matrix_rows,
     offer_rows,
     page_count,
+    position_rows,
     products_label,
+    retailer_rows,
 )
 
 PAGE_SIZE = 24
@@ -231,7 +236,67 @@ def product_page(api: ApiClient, product_id: int) -> None:
     history_chart(api, product_id)
 
 
+# ------------------------------------------------------------------------- competitors
+
+
+def _pct_color(value: object) -> str:
+    """Cell style for % vs median: green below the market, red above."""
+    if not isinstance(value, int | float):
+        return ""
+    if value < -MARKET_BAND_PCT:
+        return "background-color: rgba(46, 160, 67, 0.20)"
+    if value > MARKET_BAND_PCT:
+        return "background-color: rgba(218, 54, 51, 0.20)"
+    return ""
+
+
+def competitors_page(api: ApiClient) -> None:
+    st.title("🏷️ Comparație prețuri")
+    st.caption(
+        "Pentru vânzători: prețul fiecărui magazin față de piață (minimul și mediana "
+        "prețurilor în stoc, câte unul per magazin)."
+    )
+    brands = brand_names()
+    if not brands:
+        st.info("Nu există încă branduri în baza de date.")
+        return
+    brand = st.selectbox("Brand", brands, key="cmp_brand")
+    try:
+        comparison = api.compare(brand)
+    except ApiError as exc:
+        st.error(f"Nu am putut încărca comparația: {exc}")
+        return
+    if not comparison.products:
+        st.info(f"Niciun produs {brand} nu are încă oferte.")
+        return
+
+    st.subheader("Poziția magazinelor")
+    st.dataframe(pd.DataFrame(position_rows(comparison)), hide_index=True, width="stretch")
+
+    st.subheader("Față de mediana pieței, pe produs")
+    matrix = pd.DataFrame(matrix_rows(comparison))
+    stores = [c for c in matrix.columns if c != "Produs"]
+    st.dataframe(
+        matrix.style.map(_pct_color, subset=stores).format(
+            lambda v: format_pct(v) if pd.notna(v) else "—",
+            subset=stores,
+        ),
+        hide_index=True,
+        width="stretch",
+    )
+
+    slugs = {p.retailer.name: p.retailer.slug for p in comparison.retailers}
+    store = st.selectbox("Detalii pentru magazinul", list(slugs), key="cmp_store")
+    rows = retailer_rows(comparison, slugs[store])
+    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+    under = sum(r["Poziție"] == "Sub piață" for r in rows)
+    over = sum(r["Poziție"] == "Peste piață" for r in rows)
+    st.markdown(f"**{store}**: {under} sub piață, {over} peste piață, din {len(rows)} listate.")
+
+
 # ------------------------------------------------------------------------------- main
+
+PAGES = {"🔎 Caută produse": search_page, "🏷️ Comparație prețuri": competitors_page}
 
 
 def main() -> None:
@@ -242,7 +307,9 @@ def main() -> None:
             product_page(api, int(raw_id))
             return
         close_product()
-    search_page(api)
+    with st.sidebar:
+        choice = st.radio("Pagina", list(PAGES), key="nav")
+    PAGES[choice](api)
 
 
 main()
