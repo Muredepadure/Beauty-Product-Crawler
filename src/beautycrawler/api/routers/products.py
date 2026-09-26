@@ -2,6 +2,7 @@
 
 - `GET /api/products`: search the canonical product catalogue.
 - `GET /api/products/{id}`: one product with every retailer's offer, cheapest flagged.
+- `GET /api/products/{id}/history`: price history per retailer offer.
 
 Search (`q`) is diacritic- and case-insensitive: every word of the query must occur in
 the product's normalized name or its brand ("cremă effaclar" finds "Effaclar ... Crema").
@@ -10,6 +11,7 @@ the product's normalized name or its brand ("cremă effaclar" finds "Effaclar ..
 
 import enum
 import re
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
@@ -19,12 +21,15 @@ from sqlalchemy.orm import Session, selectinload
 from beautycrawler.api.deps import get_session
 from beautycrawler.api.schemas import (
     OfferOut,
+    PricePoint,
+    PriceSeries,
     ProductDetail,
+    ProductHistory,
     ProductPage,
     ProductSummary,
     RetailerRef,
 )
-from beautycrawler.db.models import Brand, Offer, Product
+from beautycrawler.db.models import Brand, Offer, PriceHistory, Product
 from beautycrawler.normalization.brands import brand_key, canonical_brand
 from beautycrawler.normalization.text import fold
 
@@ -186,3 +191,65 @@ def get_product(
             for o in offers
         ],
     )
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+def _window(history: list[PriceHistory], since: datetime | None) -> list[PriceHistory]:
+    """Points at/after `since`, plus the one in effect at `since` (so a chart of the
+    window starts at the right price)."""
+    if since is None:
+        return history
+    before = [h for h in history if _as_utc(h.scraped_at) < since]
+    inside = [h for h in history if _as_utc(h.scraped_at) >= since]
+    return before[-1:] + inside
+
+
+@router.get(
+    "/products/{product_id}/history",
+    response_model=ProductHistory,
+    responses={404: {"description": "No such product"}},
+)
+def get_product_history(
+    session: Annotated[Session, Depends(get_session)],
+    product_id: Annotated[int, Path(ge=1)],
+    days: Annotated[
+        int | None, Query(ge=1, le=3650, description="Only the last N days (default: all)")
+    ] = None,
+) -> ProductHistory:
+    product = session.scalars(
+        select(Product)
+        .where(Product.id == product_id)
+        .options(
+            selectinload(Product.offers).selectinload(Offer.retailer),
+            selectinload(Product.offers).selectinload(Offer.history),
+        )
+    ).one_or_none()
+    if product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    since = datetime.now(UTC) - timedelta(days=days) if days is not None else None
+    series = []
+    for offer in sorted(product.offers, key=lambda o: (o.retailer.slug, o.id)):
+        history = sorted(offer.history, key=lambda h: (_as_utc(h.scraped_at), h.id))
+        series.append(
+            PriceSeries(
+                offer_id=offer.id,
+                retailer=RetailerRef(slug=offer.retailer.slug, name=offer.retailer.name),
+                seller_name=offer.seller_name,
+                url=offer.url,
+                last_seen_at=offer.last_seen_at,
+                points=[
+                    PricePoint(
+                        scraped_at=h.scraped_at,
+                        price_bani=h.price_bani,
+                        old_price_bani=h.old_price_bani,
+                        in_stock=h.in_stock,
+                    )
+                    for h in _window(history, since)
+                ],
+            )
+        )
+    return ProductHistory(product_id=product.id, series=series)

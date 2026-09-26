@@ -63,3 +63,29 @@ class ProductDetail(ProductSummary):
     offers: list[OfferOut] = Field(
         description="In-stock offers by price, then out-of-stock offers by price"
     )
+
+
+class PricePoint(BaseModel):
+    scraped_at: UtcDatetime = Field(description="When this price/stock was first observed")
+    price_bani: int
+    old_price_bani: int | None
+    in_stock: bool
+
+
+class PriceSeries(BaseModel):
+    offer_id: int
+    retailer: RetailerRef
+    seller_name: str | None
+    url: str
+    last_seen_at: UtcDatetime = Field(description="Last time the listing was crawled")
+    points: list[PricePoint] = Field(
+        description=(
+            "Oldest first. A point is recorded only when price or stock changes, so each "
+            "one holds until the next point (or `last_seen_at`): draw it as a step chart."
+        )
+    )
+
+
+class ProductHistory(BaseModel):
+    product_id: int
+    series: list[PriceSeries] = Field(description="One per offer, by retailer slug")
