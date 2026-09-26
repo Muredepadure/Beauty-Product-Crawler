@@ -1,32 +1,49 @@
 from collections.abc import Iterator
-from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
 
+from beautycrawler.api.deps import get_session
 from beautycrawler.api.main import app
-from beautycrawler.api.routers import products
 from beautycrawler.config import Settings
 from beautycrawler.db import Base
 from beautycrawler.db.session import make_engine, make_session_factory
 
-SAMPLE_PRODUCTS: list[dict[str, Any]] = [
-    {"id": 1, "name": "Effaclar Duo+ 40ml", "brand": "La Roche-Posay", "category": "Serum"},
-    {"id": 2, "name": "Cicaplast Baume B5", "brand": "La Roche-Posay", "category": "Balsam"},
-    {"id": 3, "name": "Hydrating Cleanser", "brand": "CeraVe", "category": "Cleanser"},
-    {"id": 4, "name": "Niacinamide 10% + Zinc", "brand": "The Ordinary", "category": "Serum"},
-    {"id": 5, "name": "Sensibio H2O", "brand": "Bioderma", "category": "Cleanser"},
-]
+
+@pytest.fixture
+def api_engine() -> Iterator[Engine]:
+    """In-memory SQLite shared across threads (TestClient serves from another thread)."""
+    eng = make_engine("sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(eng)
+    yield eng
+    eng.dispose()
 
 
 @pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
-    """API client backed by a fixed product list, independent of the bundled sample data."""
-    monkeypatch.setattr(products, "PRODUCTS", SAMPLE_PRODUCTS)
-    with TestClient(app) as c:
-        yield c
+def api_session(api_engine: Engine) -> Iterator[Session]:
+    """Session on the API's database, for arranging test data (commit before requests)."""
+    with make_session_factory(api_engine)() as s:
+        yield s
+
+
+@pytest.fixture
+def client(api_engine: Engine) -> Iterator[TestClient]:
+    """API client backed by `api_engine`."""
+    factory = make_session_factory(api_engine)
+
+    def session_override() -> Iterator[Session]:
+        with factory() as s:
+            yield s
+
+    app.dependency_overrides[get_session] = session_override
+    try:
+        with TestClient(app) as c:
+            yield c
+    finally:
+        app.dependency_overrides.pop(get_session, None)
 
 
 @pytest.fixture

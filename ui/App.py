@@ -22,7 +22,7 @@ if st.button("Search") or q or brand or category:
         "q": q or None,
         "brand": brand or None,
         "category": category or None,
-        "limit": int(limit),
+        "page_size": int(limit),
     }
     with httpx.Client(timeout=15.0) as client:
         r = client.get(f"{API_BASE}/products", params=params)
@@ -34,8 +34,12 @@ if st.button("Search") or q or brand or category:
     cols = st.columns(3)
     for i, p in enumerate(items):
         with cols[i % 3]:
-            st.image(p.get("image_url"), use_column_width=True)
+            if p.get("image_url"):
+                st.image(p["image_url"], use_column_width=True)
             st.markdown(f"**{p['name']}**")
-            st.caption(f"{p['brand']} • {p.get('category', '')}")
-            st.markdown(f"**{p['price']} {p['currency']}**")
-            st.link_button("Go to provider", p["provider"])
+            st.caption(f"{p.get('brand') or ''} • {p.get('category') or ''}")
+            price = p.get("lowest_price_bani")
+            if price is not None:
+                st.markdown(f"**de la {price / 100:.2f} lei** · {p['retailer_count']} magazine")
+            else:
+                st.caption("Indisponibil")

@@ -4,8 +4,8 @@
 Type a product (e.g. "La Roche-Posay Effaclar Duo 40ml") and see every tracked Romanian
 retailer's current price (RON), stock status and link, plus price history.
 
-> Status: early development. The API currently serves a small bundled demo dataset;
-> the database, spiders and normalization are being built phase by phase — see
+> Status: early development. The API searches the product database (demo products from
+> `scripts/seed.py` until retailer spiders exist); features are built phase by phase — see
 > [`ROADMAP.md`](ROADMAP.md) and [`NIGHTLY_LOG.md`](NIGHTLY_LOG.md).
 
 ---
@@ -71,8 +71,10 @@ uvicorn beautycrawler.api.main:app --reload --port 8000
 ```
 
 - http://localhost:8000/healthz → `{"status": "ok"}`
-- http://localhost:8000/api/products?q=serum → demo search results
-  (params: `q`, `brand`, `category`, `limit` 1–100, `offset`)
+- http://localhost:8000/api/products?q=effaclar → product search
+  (params: `q` words in name/brand, diacritic-insensitive; `brand` any known alias;
+  `category`; `sort` = `name` | `price_asc` | `price_desc` | `retailers`;
+  `page` ≥ 1; `page_size` 1–100). Prices are integer bani (1 RON = 100 bani).
 - http://localhost:8000/docs → OpenAPI docs
 
 ### Run a crawl
@@ -145,13 +147,14 @@ What exists today:
 ├── src/beautycrawler/
 │   ├── api/
 │   │   ├── main.py              # FastAPI app, /healthz
-│   │   └── routers/products.py  # /api/products (demo data for now)
+│   │   ├── deps.py              # DB session dependency
+│   │   ├── schemas.py           # response models
+│   │   └── routers/products.py  # /api/products (search over the product catalogue)
 │   ├── crawler/                 # spiders go in crawler/spiders/<retailer>.py (Phase 3)
 │   ├── db/                      # SQLAlchemy models, engine/session, Alembic migrations
 │   ├── extractors/              # JSON-LD and Romanian price parsing
 │   ├── normalization/           # brand aliases, sizes, title cleanup
 │   ├── matching/                # offer -> product matching + review CLI
-│   ├── data/products.json       # bundled demo dataset
 │   └── config.py                # pydantic-settings configuration
 ├── ui/App.py                    # Streamlit UI
 ├── scripts/seed.py              # seed retailers + demo products
