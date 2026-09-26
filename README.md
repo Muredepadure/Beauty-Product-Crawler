@@ -164,6 +164,14 @@ pytest -q
 
 Tests never touch the network; retailer parsing is tested against saved fixtures.
 
+CI also runs the suite against Postgres 16. To do the same locally, point
+`TEST_DATABASE_URL` at an **empty, disposable** database (its `public` schema is dropped
+before each DB test):
+
+```bash
+TEST_DATABASE_URL=postgresql+psycopg://user:pass@localhost:5432/beautycrawler_test pytest -q
+```
+
 ---
 
 ## Run with Docker

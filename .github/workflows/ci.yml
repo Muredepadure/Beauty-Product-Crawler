@@ -35,3 +35,38 @@ jobs:
         run: mypy src scripts tests
       - name: Pytest
         run: pytest -q
+
+  # Same test suite against a real Postgres: every test using the shared DB fixtures,
+  # plus the migration tests (upgrade/downgrade/drift), runs on Postgres here.
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: beautycrawler
+          POSTGRES_PASSWORD: beautycrawler
+          POSTGRES_DB: beautycrawler_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U beautycrawler -d beautycrawler_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://beautycrawler:beautycrawler@localhost:5432/beautycrawler_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Pytest (Postgres)
+        run: pytest -q

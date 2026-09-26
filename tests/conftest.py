@@ -1,8 +1,10 @@
+import os
 from collections.abc import Iterator
+from contextlib import contextmanager
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine
+from sqlalchemy import Engine, text
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -12,10 +14,36 @@ from beautycrawler.config import Settings
 from beautycrawler.db import Base
 from beautycrawler.db.session import make_engine, make_session_factory
 
+# Set to a Postgres URL (CI's postgres job does) to run every test that uses the
+# `engine`/`session`/`api_*` fixtures, and the migration tests, against Postgres.
+# The database is wiped (all tables dropped) before each such test.
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
+
+
+def _reset(eng: Engine) -> None:
+    with eng.begin() as conn:
+        conn.execute(text("DROP SCHEMA public CASCADE"))
+        conn.execute(text("CREATE SCHEMA public"))
+
+
+@contextmanager
+def _external_engine(url: str) -> Iterator[Engine]:
+    eng = make_engine(url)
+    _reset(eng)
+    Base.metadata.create_all(eng)
+    try:
+        yield eng
+    finally:
+        eng.dispose()
+
 
 @pytest.fixture
 def api_engine() -> Iterator[Engine]:
     """In-memory SQLite shared across threads (TestClient serves from another thread)."""
+    if TEST_DATABASE_URL:
+        with _external_engine(TEST_DATABASE_URL) as eng:
+            yield eng
+        return
     eng = make_engine("sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(eng)
     yield eng
@@ -49,6 +77,10 @@ def client(api_engine: Engine) -> Iterator[TestClient]:
 @pytest.fixture
 def engine() -> Iterator[Engine]:
     """Fresh in-memory SQLite database with all tables (FKs enforced)."""
+    if TEST_DATABASE_URL:
+        with _external_engine(TEST_DATABASE_URL) as eng:
+            yield eng
+        return
     eng = make_engine("sqlite://")
     Base.metadata.create_all(eng)
     yield eng

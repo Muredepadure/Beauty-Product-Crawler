@@ -5,7 +5,8 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
-from sqlalchemy import inspect
+from conftest import TEST_DATABASE_URL
+from sqlalchemy import inspect, text
 
 from beautycrawler.db import Base
 from beautycrawler.db.session import make_engine
@@ -22,6 +23,14 @@ def alembic_config(url: str) -> Config:
 
 @pytest.fixture
 def db_url(tmp_path: Path) -> str:
+    """A fresh SQLite file, or the (wiped) TEST_DATABASE_URL database when set."""
+    if TEST_DATABASE_URL:
+        engine = make_engine(TEST_DATABASE_URL)
+        with engine.begin() as conn:
+            conn.execute(text("DROP SCHEMA public CASCADE"))
+            conn.execute(text("CREATE SCHEMA public"))
+        engine.dispose()
+        return TEST_DATABASE_URL
     return f"sqlite:///{tmp_path / 'test.db'}"
 
 
