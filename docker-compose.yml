@@ -1,0 +1,81 @@
+# Full stack: Postgres, one-shot migrations + seed, API, UI and the crawl scheduler.
+#
+#   docker compose up --build        # UI http://localhost:8501, API http://localhost:8000
+#
+# Set POSTGRES_PASSWORD in a .env file next to this one for anything but local use.
+
+x-app: &app
+  build: .
+  image: beautycrawler:latest
+  restart: unless-stopped
+  environment: &app-env
+    DATABASE_URL: postgresql+psycopg://beautycrawler:${POSTGRES_PASSWORD:-beautycrawler}@db:5432/beautycrawler
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: beautycrawler
+      POSTGRES_USER: beautycrawler
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-beautycrawler}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U beautycrawler -d beautycrawler"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    <<: *app
+    restart: "no"
+    command: ["sh", "-c", "alembic upgrade head && python scripts/seed.py --no-demo"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *app
+    command: ["uvicorn", "beautycrawler.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  ui:
+    <<: *app
+    command: ["streamlit", "run", "ui/App.py", "--server.address=0.0.0.0", "--server.port=8501", "--server.headless=true"]
+    environment:
+      <<: *app-env
+      BEAUTYCRAWLER_API_BASE_URL: http://api:8000/api
+    ports:
+      - "8501:8501"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # Hourly: crawl retailers whose interval has passed (`crawl schedule` sets it per
+  # retailer), then match new offers to products. JSON logs go to `docker compose logs`.
+  scheduler:
+    <<: *app
+    command:
+      - sh
+      - -c
+      - |
+        while true; do
+          python -m beautycrawler.crawler --log-format json run --all --due --match
+          sleep "$${CRAWL_EVERY_SECONDS:-3600}"
+        done
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:

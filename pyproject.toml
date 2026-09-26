@@ -1,0 +1,73 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "beautycrawler"
+version = "0.1.0"
+description = "Price-comparison crawler for the Romanian beauty market"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "psycopg[binary]>=3.1",
+    "httpx[http2]>=0.27",
+    "selectolax>=0.3.21",
+    "extruct>=0.17",
+    "lxml>=5.0",
+    "rapidfuzz>=3.6",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+ui = ["streamlit>=1.50"]  # width="stretch" and friends
+dev = [
+    "beautycrawler[ui]",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "respx>=0.21",
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "lxml-stubs>=0.5",
+    "pyyaml>=6.0",  # tests/test_deployment.py reads docker-compose.yml
+    "types-PyYAML>=6.0",
+    "pre-commit>=3.7",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/beautycrawler"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests feed deliberately "ambiguous" characters (typographic apostrophes, NBSP) to parsers.
+"tests/**" = ["RUF001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["beautycrawler"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src", "scripts", "tests"]
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["extruct.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+asyncio_mode = "auto"
