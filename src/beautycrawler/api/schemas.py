@@ -111,3 +111,40 @@ class BrandPage(BaseModel):
     page: int
     page_size: int
     items: list[BrandOut]
+
+
+class RetailerPrice(BaseModel):
+    retailer: RetailerRef
+    price_bani: int = Field(description="Retailer's lowest price for the product")
+    in_stock: bool
+    vs_min_pct: float | None = Field(description="% above the market minimum (0 = cheapest)")
+    vs_median_pct: float | None = Field(description="% above (+) or below (-) the median")
+    is_cheapest: bool
+
+
+class ProductComparison(BaseModel):
+    product_id: int
+    name: str
+    size_value: Decimal | None
+    size_unit: str | None
+    market_min_bani: int | None = Field(description="Lowest in-stock price across retailers")
+    market_median_bani: int | None = Field(
+        description="Median of retailers' in-stock prices (one per retailer), rounded"
+    )
+    prices: list[RetailerPrice] = Field(description="By price, in-stock first")
+
+
+class RetailerPosition(BaseModel):
+    retailer: RetailerRef
+    products_listed: int
+    cheapest_count: int = Field(description="Products where it has the market minimum")
+    avg_vs_median_pct: float | None = Field(description="Mean % vs median over its in-stock prices")
+
+
+class BrandComparison(BaseModel):
+    brand: str
+    retailers: list[RetailerPosition] = Field(description="Over all the brand's products")
+    total: int = Field(description="Products with at least one offer")
+    page: int
+    page_size: int
+    products: list[ProductComparison]
