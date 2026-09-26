@@ -14,31 +14,40 @@ Blockers / questions for owner: <or "none">
 
 ## 2026-09-26 — claude/nightly-2026-09-26-P4.4 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/5
 Builds on #4 (branch claude/nightly-2026-09-25-P0.1, not merged yet).
-Done:
+Done (every non-blocked roadmap task is now ticked):
 - P4.4 product matching: EAN exact → same-brand rapidfuzz match with guards (size/EAN
-  contradictions excluded; different numbers such as SPF 30/50 or shade 110/120 = conflict;
-  one-sided variant markers such as "Duo+" vs "Duo+M" block auto-merge). Only unambiguous
-  matches auto-link; the rest go to the new `match_candidates` review table. Also fixed
-  a P4.3 bug: clean_title dropped a trailing "+" ("B5+", "SPF 50+").
+  contradictions excluded; different numbers such as SPF 30/50 = conflict; one-sided variant
+  markers such as "Duo+" vs "Duo+M" block auto-merge); uncertain → `match_candidates` review
+  table. Fixed a P4.3 bug: clean_title dropped a trailing "+" ("B5+", "SPF 50+").
 - P4.5 `python -m beautycrawler.matching run|list|approve|reject`.
-- P5.1 /api/products served from the DB (diacritic-insensitive word search, brand aliases,
-  category, sort, page/page_size); bundled fake JSON removed.
-- P5.2 /api/products/{id} (offers by price, cheapest flagged).
-- P5.3 /api/products/{id}/history (per-offer step series, `days` window).
-- P5.4 /api/retailers, /api/brands.
-- P5.5 /api/compare?brand= seller view (vs market min/median, retailer positions).
+- P5.1–P5.5 DB-backed API: search (diacritic-insensitive, aliases, sort, page/page_size),
+  product detail (cheapest flagged), history (step series, `days`), retailers, brands,
+  seller view /api/compare. Bundled fake JSON data removed.
 - P6.1 crawl job report (--summary-json), JSON logs, inactive retailers skipped, --match.
 - P6.2 per-retailer crawl interval + `run --due` (hourly cron) + `crawl schedule`.
-Tests: 492/492 passed, lint ✓, format ✓, mypy ✓ (src, scripts, tests)
-Next: P6.3 (stale offers), then P6.4.
+- P6.3 listings missed by N complete crawls → out of stock (not for --limit/empty crawls).
+- P6.4 price-drop detection + /api/price-drops.
+- P7.5 (done first, the others build on it) typed API client parsing into the API schemas.
+- P7.1–P7.4 Streamlit UI: search cards, product page (price table + step chart), filters
+  (brand/category/price/in stock; API gained min_price/max_price/in_stock), seller view.
+  UI tested end to end with streamlit AppTest → respx → FastAPI test app.
+- P8.1 Dockerfile + docker-compose (db, migrate, api, ui, scheduler). Image built and run
+  against Postgres 16 here (compose's postgres pull hit Docker Hub rate limits).
+- P8.2 CI `postgres` job; TEST_DATABASE_URL runs DB tests + migrations on Postgres.
+- P8.3 final README (API reference, adding a retailer, Docker, config).
+Tests: 604/604 passed (SQLite) and 604/604 against local Postgres 16; lint ✓, format ✓,
+mypy ✓ (src, scripts, tests). CI green on GitHub except the P8.3 commit (README code
+block not ruff-formatted; my local check piped through `tail` and hid the exit code) —
+fixed in the next commit.
+Next: Phase 3 (P3.1 retailer audit, then spiders) as soon as the network allows it.
 Blockers / questions for owner:
-- P3.1–P3.11 still blocked: retailer domains are denied by this environment's network
-  policy (see the 2026-09-25 entry).
-- Multipacks: offers like "2 x 50 ml" are never auto-linked or turned into products
-  (they wait in review or stay unmatched) until Product/Offer get a `pack_count` column.
-  OK to add it?
-- Pagination on /api/products changed from limit/offset to page/page_size (as the
-  roadmap specifies); the Streamlit UI was adapted.
+- P3.1–P3.11 still blocked: retailer domains unreachable from this environment
+  (re-checked tonight: notino, emag, sephora, dm, douglas, makeup all fail). Allow them in
+  the environment's network settings, or run the audit locally and commit fixtures under
+  tests/fixtures/<retailer>/.
+- Multipacks: "2 x 50 ml" offers are never auto-linked or turned into products until
+  Product/Offer get a `pack_count` column. OK to add it?
+- /api/products pagination changed from limit/offset to page/page_size (roadmap spec).
 
 ## 2026-09-25 — claude/nightly-2026-09-25-P0.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/4
 Done:
