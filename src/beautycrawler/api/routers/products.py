@@ -1,4 +1,7 @@
-"""`GET /api/products`: search the canonical product catalogue.
+"""Product endpoints.
+
+- `GET /api/products`: search the canonical product catalogue.
+- `GET /api/products/{id}`: one product with every retailer's offer, cheapest flagged.
 
 Search (`q`) is diacritic- and case-insensitive: every word of the query must occur in
 the product's normalized name or its brand ("cremă effaclar" finds "Effaclar ... Crema").
@@ -9,12 +12,18 @@ import enum
 import re
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from sqlalchemy import ColumnElement, Subquery, and_, case, func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from beautycrawler.api.deps import get_session
-from beautycrawler.api.schemas import ProductPage, ProductSummary
+from beautycrawler.api.schemas import (
+    OfferOut,
+    ProductDetail,
+    ProductPage,
+    ProductSummary,
+    RetailerRef,
+)
 from beautycrawler.db.models import Brand, Offer, Product
 from beautycrawler.normalization.brands import brand_key, canonical_brand
 from beautycrawler.normalization.text import fold
@@ -122,3 +131,58 @@ def list_products(
         for row in rows
     ]
     return ProductPage(total=total, page=page, page_size=page_size, items=items)
+
+
+@router.get(
+    "/products/{product_id}",
+    response_model=ProductDetail,
+    responses={404: {"description": "No such product"}},
+)
+def get_product(
+    session: Annotated[Session, Depends(get_session)],
+    product_id: Annotated[int, Path(ge=1)],
+) -> ProductDetail:
+    product = session.scalars(
+        select(Product)
+        .where(Product.id == product_id)
+        .options(
+            selectinload(Product.brand),
+            selectinload(Product.offers).selectinload(Offer.retailer),
+        )
+    ).one_or_none()
+    if product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    offers = sorted(product.offers, key=lambda o: (not o.in_stock, o.price_bani, o.id))
+    in_stock_prices = [o.price_bani for o in offers if o.in_stock]
+    lowest = min(in_stock_prices) if in_stock_prices else None
+    return ProductDetail(
+        id=product.id,
+        name=product.name,
+        brand=product.brand.name if product.brand else None,
+        category=product.category,
+        size_value=product.size_value,
+        size_unit=product.size_unit,
+        ean=product.ean,
+        image_url=product.image_url,
+        lowest_price_bani=lowest,
+        offer_count=len(offers),
+        retailer_count=len({o.retailer_id for o in offers}),
+        in_stock=lowest is not None,
+        offers=[
+            OfferOut(
+                id=o.id,
+                retailer=RetailerRef(slug=o.retailer.slug, name=o.retailer.name),
+                url=o.url,
+                title=o.title,
+                seller_name=o.seller_name,
+                price_bani=o.price_bani,
+                old_price_bani=o.old_price_bani,
+                currency=o.currency,
+                in_stock=o.in_stock,
+                last_seen_at=o.last_seen_at,
+                is_cheapest=o.in_stock and o.price_bani == lowest,
+            )
+            for o in offers
+        ],
+    )

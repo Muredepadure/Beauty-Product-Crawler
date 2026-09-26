@@ -243,3 +243,80 @@ def test_openapi_documents_response_schema(client: TestClient) -> None:
     spec = client.get("/openapi.json").json()
     schema = spec["components"]["schemas"]["ProductSummary"]
     assert "lowest_price_bani" in schema["properties"]
+
+
+# --- P5.2: product detail ----------------------------------------------------------
+
+
+def test_product_detail_offers_sorted_and_cheapest_flagged(
+    client: TestClient, catalogue: dict[str, int]
+) -> None:
+    body = client.get(f"/api/products/{catalogue['duo']}").json()
+    assert body["name"] == "Effaclar Duo+ cremă corectoare"
+    assert (body["lowest_price_bani"], body["offer_count"], body["retailer_count"]) == (
+        7_450,
+        3,
+        3,
+    )
+    offers = body["offers"]
+    # in stock by price first; the cheaper out-of-stock offer comes last
+    assert [(o["retailer"]["slug"], o["price_bani"], o["in_stock"]) for o in offers] == [
+        ("emag", 7_450, True),
+        ("notino", 8_990, True),
+        ("drmax", 6_000, False),
+    ]
+    assert [o["is_cheapest"] for o in offers] == [True, False, False]
+    first = offers[0]
+    assert first["url"] == "https://emag.ro/7450"
+    assert first["retailer"] == {"slug": "emag", "name": "emag"}
+    assert first["currency"] == "RON"
+    assert first["last_seen_at"].endswith("Z")  # UTC, even from SQLite
+
+
+def test_product_detail_ties_all_flagged(
+    client: TestClient, api_session: Session, catalogue: dict[str, int]
+) -> None:
+    cica = api_session.get(Product, catalogue["cica"])
+    emag = api_session.query(Retailer).filter_by(slug="emag").one()
+    assert cica is not None
+    api_session.add(
+        Offer(
+            product=cica,
+            retailer=emag,
+            url="https://emag.ro/cica",
+            title="Cicaplast",
+            price_bani=5_500,
+            in_stock=True,
+            old_price_bani=6_500,
+        )
+    )
+    api_session.commit()
+    offers = client.get(f"/api/products/{catalogue['cica']}").json()["offers"]
+    assert [o["is_cheapest"] for o in offers] == [True, True]
+    assert {o["old_price_bani"] for o in offers} == {None, 6_500}
+
+
+def test_product_detail_without_offers(client: TestClient, catalogue: dict[str, int]) -> None:
+    body = client.get(f"/api/products/{catalogue['nobrand']}").json()
+    assert (body["offers"], body["lowest_price_bani"], body["in_stock"]) == ([], None, False)
+
+
+def test_product_detail_nothing_in_stock(client: TestClient, catalogue: dict[str, int]) -> None:
+    body = client.get(f"/api/products/{catalogue['cleanser']}").json()
+    assert body["lowest_price_bani"] is None
+    assert [o["is_cheapest"] for o in body["offers"]] == [False]
+
+
+def test_product_detail_matches_list_summary(client: TestClient, catalogue: dict[str, int]) -> None:
+    listed = {p["id"]: p for p in client.get("/api/products").json()["items"]}
+    for product_id in catalogue.values():
+        detail = client.get(f"/api/products/{product_id}").json()
+        detail.pop("offers")
+        assert detail == listed[product_id]
+
+
+@pytest.mark.parametrize(("path", "status"), [("999", 404), ("0", 422), ("abc", 422)])
+def test_product_detail_errors(
+    client: TestClient, catalogue: dict[str, int], path: str, status: int
+) -> None:
+    assert client.get(f"/api/products/{path}").status_code == status

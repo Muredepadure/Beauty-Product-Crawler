@@ -75,6 +75,8 @@ uvicorn beautycrawler.api.main:app --reload --port 8000
   (params: `q` words in name/brand, diacritic-insensitive; `brand` any known alias;
   `category`; `sort` = `name` | `price_asc` | `price_desc` | `retailers`;
   `page` ≥ 1; `page_size` 1–100). Prices are integer bani (1 RON = 100 bani).
+- http://localhost:8000/api/products/1 → one product with every retailer's offer
+  (in stock by price first; `is_cheapest` marks the lowest in-stock price)
 - http://localhost:8000/docs → OpenAPI docs
 
 ### Run a crawl

@@ -75,7 +75,7 @@ Each spider task: parser + fixture tests + discovery (prefer sitemaps) + a `--li
 ## Phase 5 — API v1 (DB-backed)
 
 - [x] **P5.1** Replace JSON file with DB: `GET /api/products?q=&brand=&category=&sort=&page=` (search over normalized name + brand).
-- [ ] **P5.2** `GET /api/products/{id}`: all offers across retailers, sorted by price; cheapest flagged.
+- [x] **P5.2** `GET /api/products/{id}`: all offers across retailers, sorted by price; cheapest flagged.
 - [ ] **P5.3** `GET /api/products/{id}/history`: price history per retailer.
 - [ ] **P5.4** `GET /api/retailers`, `GET /api/brands`; pagination and response schemas documented in OpenAPI.
 - [ ] **P5.5** Seller view: `GET /api/compare?brand=X` — for a brand's products, each retailer's price vs the market minimum/median.
