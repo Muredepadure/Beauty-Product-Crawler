@@ -99,4 +99,4 @@ Each spider task: parser + fixture tests + discovery (prefer sitemaps) + a `--li
 
 - [x] **P8.1** Dockerfile(s) + `docker-compose.yml` (api, ui, postgres, scheduler).
 - [x] **P8.2** Postgres integration test job in CI (service container).
-- [ ] **P8.3** Final README: setup, running crawls, API reference, adding a new retailer.
+- [x] **P8.3** Final README: setup, running crawls, API reference, adding a new retailer.
