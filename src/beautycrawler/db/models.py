@@ -8,6 +8,8 @@
   eMAG can list one product from several sellers, so (product, retailer) is not unique;
   (retailer, url) is.
 - `PriceHistory`: observations of an offer's price/stock over time.
+- `MatchCandidate`: an offer/product pair the matcher found plausible but not certain;
+  a human approves or rejects it (review table, P4.4/P4.5).
 
 All money is integer **bani** (1 RON = 100 bani).
 """
@@ -19,6 +21,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -32,6 +35,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from beautycrawler.db.base import Base, TimestampMixin, utcnow
 
 SIZE_UNITS = ("ml", "l", "g", "kg", "buc")
+MATCH_STATUSES = ("pending", "approved", "rejected")
 
 
 class Retailer(TimestampMixin, Base):
@@ -160,3 +164,36 @@ class PriceHistory(Base):
 
     def __repr__(self) -> str:
         return f"PriceHistory(offer_id={self.offer_id!r}, price_bani={self.price_bani!r})"
+
+
+class MatchCandidate(TimestampMixin, Base):
+    """A possible offer -> product link awaiting (or after) human review.
+
+    Rejected pairs are kept so re-running the matcher never proposes them again.
+    """
+
+    __tablename__ = "match_candidates"
+    __table_args__ = (
+        UniqueConstraint("offer_id", "product_id", name="uq_match_candidates_offer_id_product_id"),
+        CheckConstraint("status IN ('pending', 'approved', 'rejected')", name="status_known"),
+        CheckConstraint("score >= 0 AND score <= 100", name="score_range"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    offer_id: Mapped[int] = mapped_column(ForeignKey("offers.id", ondelete="CASCADE"), index=True)
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
+    score: Mapped[float] = mapped_column(Float)
+    reason: Mapped[str] = mapped_column(String(500))  # why it needs review
+    status: Mapped[str] = mapped_column(String(10), default="pending", index=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    offer: Mapped[Offer] = relationship()
+    product: Mapped[Product] = relationship()
+
+    def __repr__(self) -> str:
+        return (
+            f"MatchCandidate(offer_id={self.offer_id!r}, product_id={self.product_id!r}, "
+            f"score={self.score!r}, status={self.status!r})"
+        )

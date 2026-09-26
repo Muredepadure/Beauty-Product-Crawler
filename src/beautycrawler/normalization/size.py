@@ -120,3 +120,19 @@ def parse_size(title: str | None) -> Size | None:
         return None
     [(value, unit)] = distinct
     return Size(value, unit, 1)
+
+
+_STRIP_RES = tuple(
+    re.compile(p.pattern, re.IGNORECASE) for p in (_PACK_BEFORE_RE, _PACK_AFTER_RE, _SIZE_RE)
+)
+
+
+def strip_sizes(text: str) -> str:
+    """`text` with size mentions ("40 ml", "2 x 50 ml", "30 capsule") removed.
+
+    Case-insensitive; unit words are matched in their ASCII spellings, so fold the text
+    first when it may contain diacritic units ("bucăți"). Whitespace is collapsed.
+    """
+    for pattern in _STRIP_RES:
+        text = pattern.sub(" ", text)
+    return " ".join(text.split())

@@ -13,6 +13,9 @@ from beautycrawler.normalization.title import clean_title
         ("Reducere 30% Vichy Mineral 89", "Vichy Mineral 89"),
         ("Vichy Mineral 89 - Discount: 10%", "Vichy Mineral 89"),
         ("Pana la -50% Sampon 400 ml", "Sampon 400 ml"),
+        # a "+" attached to the name is kept, even at the end
+        ("La Roche-Posay Cicaplast Baume B5+ -10%", "La Roche-Posay Cicaplast Baume B5+"),
+        ("Anthelios SPF 50+ PROMO", "Anthelios SPF 50+"),
         ("Crema -20% 50 ml", "Crema 50 ml"),
         # promo tags
         ("PROMO La Roche-Posay Effaclar", "La Roche-Posay Effaclar"),

@@ -35,6 +35,7 @@ def test_tables_created(engine: Engine) -> None:
         "products",
         "offers",
         "price_history",
+        "match_candidates",
     }
 
 

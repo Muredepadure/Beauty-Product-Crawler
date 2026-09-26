@@ -59,7 +59,9 @@ _RULES: list[re.Pattern[str]] = [
     re.compile(rf"(?<![\w-])(?:{_PROMO})!*(?![\w-])", re.IGNORECASE),
     re.compile(rf"(?<![\w-])(?:{_PROMO_ENGLISH})!+", re.IGNORECASE),
 ]
-_SEPARATORS = re.compile(r"^[\s\-|,:;/]+|[\s\-|,:;/+]+$")
+# A trailing "+" is only a separator after a space ("Cremă +" left by a removed gift);
+# attached to a word it is part of the name ("Cicaplast Baume B5+", "SPF 50+").
+_SEPARATORS = re.compile(r"^[\s\-|,:;/]+|(?:[\s\-|,:;/]|(?<=\s)\+)+$")
 _EMPTY_BRACKETS = re.compile(rf"[(\[]{_WS}*[)\]]")
 
 
