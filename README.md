@@ -201,12 +201,12 @@ retailer's own interval decides whether it is crawled then.
 
    @register
    class NotinoSpider(JsonLdSpider):
-       slug = "notino"                       # = Retailer.slug
+       slug = "notino"  # = Retailer.slug
        name = "Notino"
        base_url = "https://www.notino.ro"
 
        def is_product_url(self, url: str) -> bool:
-           return "/p-" in url               # keep only product pages from the sitemaps
+           return "/p-" in url  # keep only product pages from the sitemaps
    ```
 
    `JsonLdSpider` covers sites with complete schema.org JSON-LD. Otherwise subclass
