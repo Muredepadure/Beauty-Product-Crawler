@@ -85,7 +85,7 @@ Each spider task: parser + fixture tests + discovery (prefer sitemaps) + a `--li
 - [x] **P6.1** `crawl all` job with per-retailer isolation (one failing site doesn't stop others), run summary + structured logs.
 - [x] **P6.2** Scheduling: APScheduler entry point and/or documented cron; configurable frequency per retailer.
 - [x] **P6.3** Mark offers stale/out-of-stock when not seen for N runs.
-- [ ] **P6.4** Price-drop detection: query/endpoint for products whose price fell ≥ X% since last run (foundation for alerts).
+- [x] **P6.4** Price-drop detection: query/endpoint for products whose price fell ≥ X% since last run (foundation for alerts).
 
 ## Phase 7 — UI (Streamlit)
 

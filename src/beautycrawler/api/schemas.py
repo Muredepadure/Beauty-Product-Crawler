@@ -148,3 +148,27 @@ class BrandComparison(BaseModel):
     page: int
     page_size: int
     products: list[ProductComparison]
+
+
+class ProductRef(BaseModel):
+    id: int
+    name: str
+    brand: str | None
+
+
+class PriceDropOut(BaseModel):
+    offer_id: int
+    product: ProductRef | None = Field(description="Null until the listing is matched")
+    retailer: RetailerRef
+    title: str
+    url: str
+    previous_price_bani: int
+    price_bani: int
+    drop_pct: float = Field(description="Cut vs the previous price, in %")
+    changed_at: UtcDatetime
+
+
+class PriceDropList(BaseModel):
+    min_pct: float
+    since: UtcDatetime
+    items: list[PriceDropOut] = Field(description="Biggest drops first")

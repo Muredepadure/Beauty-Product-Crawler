@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import catalog, compare, products
+from .routers import alerts, catalog, compare, products
 
 app = FastAPI(title="BeautyCrawler API (MVP)")
 
@@ -23,3 +23,4 @@ def healthz() -> dict[str, str]:
 app.include_router(products.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
 app.include_router(compare.router, prefix="/api")
+app.include_router(alerts.router, prefix="/api")

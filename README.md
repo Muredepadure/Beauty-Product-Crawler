@@ -83,6 +83,8 @@ uvicorn beautycrawler.api.main:app --reload --port 8000
 - http://localhost:8000/api/brands?q=loreal → brands (paginated: `page`, `page_size` 1–200)
 - http://localhost:8000/api/compare?brand=LRP → seller view: each retailer's price per
   product vs the market minimum/median, and each retailer's overall position
+- http://localhost:8000/api/price-drops?min_pct=15&hours=24 → in-stock listings whose
+  latest price change was a cut of at least 15 % in the last 24 h (biggest first)
 - http://localhost:8000/docs → OpenAPI docs
 
 ### Run a crawl
@@ -185,7 +187,8 @@ What exists today:
 │   │   ├── schemas.py           # response models
 │   │   ├── routers/products.py  # /api/products, /{id}, /{id}/history
 │   │   ├── routers/catalog.py   # /api/retailers, /api/brands
-│   │   └── routers/compare.py   # /api/compare (seller view)
+│   │   ├── routers/compare.py   # /api/compare (seller view)
+│   │   └── routers/alerts.py    # /api/price-drops
 │   ├── crawler/                 # spiders go in crawler/spiders/<retailer>.py (Phase 3)
 │   ├── db/                      # SQLAlchemy models, engine/session, Alembic migrations
 │   ├── extractors/              # JSON-LD and Romanian price parsing
