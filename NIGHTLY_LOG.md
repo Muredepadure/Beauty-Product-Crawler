@@ -12,6 +12,24 @@ Blockers / questions for owner: <or "none">
 
 ---
 
+## 2026-09-26 (second run) — claude/nightly-2026-09-26-P3.1 — PR (see branch)
+Done: no roadmap task. Every task not marked [!] is ticked, and all remaining tasks
+(P3.1–P3.11) are still blocked.
+- Re-checked P3.1: robots.txt requests to all 10 retailer domains fail from this environment
+  (no connection, HTTP 000), so the audit and fixtures are still not possible.
+- Checked that main (#4 and #5 landed) is healthy on Python 3.12.
+- No owner comments on #4/#5, so the open questions below still stand. I did not add
+  `pack_count` without an answer.
+Tests: 604/604 passed, lint ✓, format ✓, mypy ✓ (src, scripts, tests)
+Next: P3.1 as soon as the retailer domains are reachable (or fixtures are committed).
+Blockers / questions for owner:
+- Nightly runs have nothing left to do until P3.1 is unblocked: allow the 10 retailer domains
+  in the environment's Network access settings, or run the audit locally and commit
+  fixtures under tests/fixtures/<retailer>/. Consider pausing the schedule until then.
+- Still open: add `pack_count` to Product/Offer for multipacks?
+- Environment note: the container's default `python` is 3.11. The project needs 3.12
+  (`uv venv -p python3.12`).
+
 ## 2026-09-26 — claude/nightly-2026-09-26-P4.4 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/5
 Builds on #4 (branch claude/nightly-2026-09-25-P0.1, not merged yet).
 Done (every non-blocked roadmap task is now ticked):
