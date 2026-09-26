@@ -79,6 +79,8 @@ uvicorn beautycrawler.api.main:app --reload --port 8000
   (in stock by price first; `is_cheapest` marks the lowest in-stock price)
 - http://localhost:8000/api/products/1/history?days=90 → price history per retailer
   offer (points are recorded on change only: draw them as steps)
+- http://localhost:8000/api/retailers → tracked retailers with offer/product counts
+- http://localhost:8000/api/brands?q=loreal → brands (paginated: `page`, `page_size` 1–200)
 - http://localhost:8000/docs → OpenAPI docs
 
 ### Run a crawl
@@ -153,7 +155,8 @@ What exists today:
 │   │   ├── main.py              # FastAPI app, /healthz
 │   │   ├── deps.py              # DB session dependency
 │   │   ├── schemas.py           # response models
-│   │   └── routers/products.py  # /api/products (search over the product catalogue)
+│   │   ├── routers/products.py  # /api/products, /{id}, /{id}/history
+│   │   └── routers/catalog.py   # /api/retailers, /api/brands
 │   ├── crawler/                 # spiders go in crawler/spiders/<retailer>.py (Phase 3)
 │   ├── db/                      # SQLAlchemy models, engine/session, Alembic migrations
 │   ├── extractors/              # JSON-LD and Romanian price parsing

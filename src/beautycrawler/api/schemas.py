@@ -89,3 +89,25 @@ class PriceSeries(BaseModel):
 class ProductHistory(BaseModel):
     product_id: int
     series: list[PriceSeries] = Field(description="One per offer, by retailer slug")
+
+
+class RetailerOut(BaseModel):
+    slug: str
+    name: str
+    domain: str
+    is_active: bool
+    offer_count: int = Field(description="Listings stored for this retailer")
+    product_count: int = Field(description="Distinct matched products with a listing")
+
+
+class BrandOut(BaseModel):
+    id: int
+    name: str
+    product_count: int
+
+
+class BrandPage(BaseModel):
+    total: int = Field(description="Matches across all pages")
+    page: int
+    page_size: int
+    items: list[BrandOut]
