@@ -1,4 +1,7 @@
+import json
+import logging
 from collections.abc import AsyncIterator, Callable, Iterator
+from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -15,6 +18,7 @@ from beautycrawler.crawler.fetcher import PoliteFetcher
 from beautycrawler.crawler.spider import JsonLdSpider, register
 from beautycrawler.db import Base, Offer, PriceHistory, Retailer
 from beautycrawler.db.session import make_engine, make_session_factory
+from beautycrawler.logs import JsonFormatter, configure_logging
 
 BASE = "https://clitest.example.ro"
 BROKEN = "https://broken.example.ro"
@@ -187,3 +191,148 @@ async def test_run_spider_commits_in_batches(
         summary = await runner.run_spider("clitest", make_session_factory(engine), f)
     assert summary.failed is None
     assert summary.outcomes["created"] == 1
+
+
+# --- P6.1: crawl job report, inactive retailers, structured logs ---------------------
+
+
+def test_summary_json_report(
+    mock: respx.MockRouter,
+    db: tuple[str, Engine],
+    settings: Settings,
+    fake_time: FakeTime,
+    tmp_path: Path,
+) -> None:
+    url, _ = db
+    report_path = tmp_path / "report.json"
+    argv = [
+        "run",
+        "--retailer",
+        "clitest-broken",
+        "--retailer",
+        "clitest",
+        "--database-url",
+        url,
+        "--summary-json",
+        str(report_path),
+    ]
+    assert main(argv, fetcher_factory(settings, fake_time)) == 1
+    report = json.loads(report_path.read_text("utf-8"))
+    assert report["ok"] is False
+    assert report["totals"] == {
+        "retailers": 2,
+        "succeeded": 1,
+        "failed": 1,
+        "skipped": 0,
+        "pages_fetched": 2,
+        "offers": 2,
+        "errors": 0,
+    }
+    broken, ok = report["retailers"]
+    assert (broken["retailer"], broken["status"]) == ("clitest-broken", "failed")
+    assert broken["failed"] == "RuntimeError: site layout changed"
+    assert (ok["retailer"], ok["status"], ok["failed"]) == ("clitest", "ok", None)
+    assert ok["outcomes"] == {"created": 1, "changed": 0, "unchanged": 1, "stale": 0}
+    assert ok["duration_seconds"] >= 0
+    started = datetime.fromisoformat(report["started_at"])
+    assert started <= datetime.fromisoformat(report["finished_at"])
+
+
+def test_inactive_retailer_is_skipped(
+    mock: respx.MockRouter,
+    db: tuple[str, Engine],
+    settings: Settings,
+    fake_time: FakeTime,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    url, engine = db
+    with Session(engine) as s:
+        s.add(
+            Retailer(slug="clitest", name="Blocked", domain="clitest.example.ro", is_active=False)
+        )
+        s.commit()
+    argv = ["run", "--retailer", "clitest", "--database-url", url]
+    assert main(argv, fetcher_factory(settings, fake_time)) == 0
+    assert "clitest: skipped: retailer is marked inactive" in capsys.readouterr().out
+    assert count(engine, Offer) == 0
+    assert not mock.calls  # not a single request to the site
+
+    assert main([*argv, "--include-inactive"], fetcher_factory(settings, fake_time)) == 0
+    assert count(engine, Offer) == 1
+
+
+def test_match_after_crawl(
+    mock: respx.MockRouter,
+    db: tuple[str, Engine],
+    settings: Settings,
+    fake_time: FakeTime,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    url, engine = db
+    report_path = tmp_path / "r.json"
+    argv = ["run", "--retailer", "clitest", "--database-url", url, "--match"]
+    argv += ["--summary-json", str(report_path)]
+    assert main(argv, fetcher_factory(settings, fake_time)) == 0
+    assert "matching: new_product 1" in capsys.readouterr().out
+    assert json.loads(report_path.read_text("utf-8"))["matching"] == {"new_product": 1}
+    with Session(engine) as s:
+        assert s.scalars(select(Offer)).one().product_id is not None
+
+
+def test_json_logs(
+    mock: respx.MockRouter,
+    db: tuple[str, Engine],
+    settings: Settings,
+    fake_time: FakeTime,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    url, _ = db
+    argv = ["-v", "--log-format", "json", "run", "--retailer", "clitest-broken"]
+    argv += ["--retailer", "clitest", "--database-url", url]
+    try:
+        main(argv, fetcher_factory(settings, fake_time))
+    finally:
+        configure_logging()  # back to quiet text logging for later tests
+    lines = [json.loads(line) for line in capsys.readouterr().err.splitlines() if line]
+    events = {e.get("event"): e for e in lines if "event" in e}
+    finished = events["crawl_finished"]
+    assert (finished["retailer"], finished["level"], finished["pages_fetched"]) == (
+        "clitest",
+        "INFO",
+        2,
+    )
+    failed = events["crawl_failed"]
+    assert (failed["retailer"], failed["level"]) == ("clitest-broken", "ERROR")
+    assert "RuntimeError: site layout changed" in failed["exception"]
+
+
+def test_json_formatter() -> None:
+    record = logging.LogRecord("beautycrawler.x", logging.WARNING, "f.py", 1, "hi %s", ("ș",), None)
+    record.retailer = "notino"
+    entry = json.loads(JsonFormatter().format(record))
+    assert entry["message"] == "hi ș"
+    assert (entry["level"], entry["logger"], entry["retailer"]) == (
+        "WARNING",
+        "beautycrawler.x",
+        "notino",
+    )
+    assert entry["ts"].endswith("+00:00")
+    assert "args" not in entry and "exception" not in entry
+
+
+async def test_run_many_measures_each_retailer(
+    mock: respx.MockRouter, db: tuple[str, Engine], settings: Settings, fake_time: FakeTime
+) -> None:
+    _, engine = db
+    ticks = iter([10.0, 12.5, 20.0, 21.0])
+    async with PoliteFetcher(settings, sleep=fake_time.sleep, clock=fake_time.clock) as f:
+        report = await runner.run_many(
+            ["clitest", "clitest-broken"],
+            make_session_factory(engine),
+            f,
+            clock=lambda: next(ticks),
+        )
+    assert [s.duration_seconds for s in report.summaries] == [2.5, 1.0]
+    assert [s.status for s in report.summaries] == ["ok", "failed"]
+    assert report.ok is False

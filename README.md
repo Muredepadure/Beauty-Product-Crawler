@@ -91,7 +91,15 @@ uvicorn beautycrawler.api.main:app --reload --port 8000
 python -m beautycrawler.crawler list                          # registered spiders
 python -m beautycrawler.crawler run --retailer notino --limit 20
 python -m beautycrawler.crawler run --all
+python -m beautycrawler.crawler --log-format json run --all --match --summary-json run.json
 ```
+
+Each retailer runs in isolation: a failing site is reported (`FAILED: ...`, exit code 1)
+and the next one still runs. Retailers marked inactive in the database (e.g. blocked)
+are skipped unless `--include-inactive`. `--match` links new offers to products after
+the crawl; `--summary-json` writes a machine-readable run report (per-retailer status,
+duration, pages, offers, errors; totals); `--log-format json` emits one JSON object per
+log line with `event` (`crawl_finished`, `crawl_failed`, `crawl_skipped`) and `retailer`.
 
 Offers are upserted into the database; price history gets a row only when price or
 stock changes. No retailer spiders exist yet (see Phase 3 in `ROADMAP.md`).

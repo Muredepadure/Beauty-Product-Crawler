@@ -1,10 +1,20 @@
-"""Run spiders and store their offers (P1.3 write path)."""
+"""Run spiders and store their offers (P1.3 write path).
+
+`run_many` is the crawl job: retailers run one after another, each isolated (a failing
+site is recorded and the next one runs), each emitting a structured `crawl_finished` /
+`crawl_failed` log event; `RunReport` sums the run up for the CLI and schedulers.
+Retailers marked inactive in the database (e.g. blocked, see CLAUDE.md) are skipped.
+"""
 
 import importlib
 import logging
 import pkgutil
+import time
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from typing import Any
 from urllib.parse import urlsplit
 
 from sqlalchemy import select
@@ -27,8 +37,12 @@ class RunSummary:
     stats: CrawlStats = field(default_factory=CrawlStats)
     outcomes: Counter[str] = field(default_factory=Counter)
     failed: str | None = None  # set when the whole run aborted
+    skipped: str | None = None  # set when the retailer was not crawled at all
+    duration_seconds: float = 0.0
 
     def line(self) -> str:
+        if self.skipped:
+            return f"{self.retailer}: skipped: {self.skipped}"
         if self.failed:
             return f"{self.retailer}: FAILED: {self.failed}"
         o = self.outcomes
@@ -37,6 +51,56 @@ class RunSummary:
             f"({o['created']} new, {o['changed']} changed, {o['unchanged']} unchanged, "
             f"{o['stale']} stale), {len(self.stats.errors)} errors"
         )
+
+    @property
+    def status(self) -> str:
+        return "skipped" if self.skipped else "failed" if self.failed else "ok"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "retailer": self.retailer,
+            "status": self.status,
+            "failed": self.failed,
+            "skipped": self.skipped,
+            "duration_seconds": round(self.duration_seconds, 3),
+            "pages_fetched": self.stats.pages_fetched,
+            "offers": self.stats.offers,
+            "pages_without_offers": self.stats.pages_without_offers,
+            "outcomes": {k: self.outcomes[k] for k in ("created", "changed", "unchanged", "stale")},
+            "errors": list(self.stats.errors),
+        }
+
+
+@dataclass(slots=True)
+class RunReport:
+    """A whole crawl job: when it ran and each retailer's summary."""
+
+    started_at: datetime
+    finished_at: datetime
+    summaries: list[RunSummary]
+
+    @property
+    def ok(self) -> bool:
+        return not any(s.failed for s in self.summaries)
+
+    def to_dict(self) -> dict[str, Any]:
+        crawled = [s for s in self.summaries if s.status == "ok"]
+        return {
+            "started_at": self.started_at.isoformat(),
+            "finished_at": self.finished_at.isoformat(),
+            "duration_seconds": round((self.finished_at - self.started_at).total_seconds(), 3),
+            "ok": self.ok,
+            "totals": {
+                "retailers": len(self.summaries),
+                "succeeded": len(crawled),
+                "failed": sum(1 for s in self.summaries if s.failed),
+                "skipped": sum(1 for s in self.summaries if s.skipped),
+                "pages_fetched": sum(s.stats.pages_fetched for s in crawled),
+                "offers": sum(s.stats.offers for s in crawled),
+                "errors": sum(len(s.stats.errors) for s in crawled),
+            },
+            "retailers": [s.to_dict() for s in self.summaries],
+        }
 
 
 def load_spiders() -> dict[str, type[Spider]]:
@@ -86,18 +150,54 @@ async def run_spider(
     return summary
 
 
+def inactive_retailers(session_factory: sessionmaker[Session], slugs: list[str]) -> set[str]:
+    """Slugs whose retailer row exists and is marked inactive."""
+    with session_factory() as session:
+        return set(
+            session.scalars(
+                select(Retailer.slug).where(Retailer.slug.in_(slugs), Retailer.is_active.is_(False))
+            )
+        )
+
+
 async def run_many(
     slugs: list[str],
     session_factory: sessionmaker[Session],
     fetcher: PoliteFetcher,
     limit: int | None = None,
-) -> list[RunSummary]:
+    *,
+    include_inactive: bool = False,
+    clock: Callable[[], float] = time.monotonic,
+) -> RunReport:
     """Run retailers one after another; one failing retailer doesn't stop the others."""
+    started_at = datetime.now(UTC)
+    inactive = set() if include_inactive else inactive_retailers(session_factory, slugs)
     summaries = []
     for slug in slugs:
+        if slug in inactive:
+            summary = RunSummary(retailer=slug, skipped="retailer is marked inactive")
+            log.info(
+                "%s: skipped (inactive)",
+                slug,
+                extra={"event": "crawl_skipped", "retailer": slug},
+            )
+            summaries.append(summary)
+            continue
+        start = clock()
         try:
-            summaries.append(await run_spider(slug, session_factory, fetcher, limit))
+            summary = await run_spider(slug, session_factory, fetcher, limit)
         except Exception as exc:
-            log.exception("crawl of %s failed", slug)
-            summaries.append(RunSummary(retailer=slug, failed=f"{type(exc).__name__}: {exc}"))
-    return summaries
+            summary = RunSummary(retailer=slug, failed=f"{type(exc).__name__}: {exc}")
+            summary.duration_seconds = clock() - start
+            log.exception(
+                "crawl of %s failed",
+                slug,
+                extra={"event": "crawl_failed", **summary.to_dict()},
+            )
+        else:
+            summary.duration_seconds = clock() - start
+            log.info(
+                "%s: crawl finished", slug, extra={"event": "crawl_finished", **summary.to_dict()}
+            )
+        summaries.append(summary)
+    return RunReport(started_at, datetime.now(UTC), summaries)
