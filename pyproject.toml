@@ -34,6 +34,8 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.10",
     "lxml-stubs>=0.5",
+    "pyyaml>=6.0",  # tests/test_deployment.py reads docker-compose.yml
+    "types-PyYAML>=6.0",
     "pre-commit>=3.7",
 ]
 

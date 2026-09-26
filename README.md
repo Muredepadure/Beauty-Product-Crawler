@@ -166,6 +166,29 @@ Tests never touch the network; retailer parsing is tested against saved fixtures
 
 ---
 
+## Run with Docker
+
+`docker-compose.yml` runs the whole stack from one image (`Dockerfile`):
+
+| Service | What it does |
+|---|---|
+| `db` | Postgres 16 (data in the `pgdata` volume) |
+| `migrate` | one-shot: `alembic upgrade head` + seed the retailers table |
+| `api` | FastAPI on http://localhost:8000 |
+| `ui` | Streamlit on http://localhost:8501 (talks to `api`) |
+| `scheduler` | hourly `crawl run --all --due --match` (JSON logs) |
+
+```bash
+echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)" > .env   # anything but local use
+docker compose up --build -d
+docker compose logs -f scheduler
+docker compose run --rm api python -m beautycrawler.crawler schedule
+docker compose run --rm api python -m beautycrawler.matching list
+```
+
+`CRAWL_EVERY_SECONDS` (default 3600) sets how often the scheduler wakes up; each
+retailer's own interval decides whether it is crawled then.
+
 ## Configuration
 
 Settings are read from environment variables or `.env` (see [`.env.example`](.env.example)):
@@ -208,6 +231,8 @@ What exists today:
 ├── tests/                       # pytest suite (no network)
 ├── .github/workflows/ci.yml     # lint, type-check, tests
 ├── alembic.ini                  # Alembic config (URL comes from DATABASE_URL)
+├── Dockerfile                   # one image for api, ui, scheduler, migrate
+├── docker-compose.yml           # full stack with Postgres
 ├── pyproject.toml               # package metadata, deps, ruff/mypy/pytest config
 ├── .env.example                 # documented environment variables
 ├── CLAUDE.md                    # project rules and stack decisions

@@ -97,6 +97,6 @@ Each spider task: parser + fixture tests + discovery (prefer sitemaps) + a `--li
 
 ## Phase 8 — Packaging & deployment
 
-- [ ] **P8.1** Dockerfile(s) + `docker-compose.yml` (api, ui, postgres, scheduler).
+- [x] **P8.1** Dockerfile(s) + `docker-compose.yml` (api, ui, postgres, scheduler).
 - [ ] **P8.2** Postgres integration test job in CI (service container).
 - [ ] **P8.3** Final README: setup, running crawls, API reference, adding a new retailer.
