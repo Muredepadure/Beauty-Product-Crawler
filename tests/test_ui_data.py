@@ -1,12 +1,16 @@
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
 
-from beautycrawler.api.schemas import ProductSummary
+from beautycrawler.api.schemas import ProductDetail, ProductHistory, ProductSummary
 from beautycrawler.ui_data import (
     card_price_line,
     card_subtitle,
+    discount_pct,
     format_size,
+    history_rows,
+    offer_rows,
     page_count,
     plural_ro,
     products_label,
@@ -87,3 +91,93 @@ def test_card_lines() -> None:
 @pytest.mark.parametrize(("total", "pages"), [(0, 1), (1, 1), (24, 1), (25, 2), (48, 2), (49, 3)])
 def test_page_count(total: int, pages: int) -> None:
     assert page_count(total, 24) == pages
+
+
+# --- P7.2 helpers ----------------------------------------------------------------------
+
+
+def test_discount_pct() -> None:
+    assert discount_pct(7_490, 8_990) == 17
+    assert discount_pct(8_990, None) is None
+    assert discount_pct(8_990, 8_990) is None
+
+
+NOW = datetime(2026, 9, 26, 12, 0, tzinfo=UTC)
+
+
+def test_offer_rows() -> None:
+    detail = ProductDetail.model_validate(
+        _summary().model_dump()
+        | {
+            "offers": [
+                {
+                    "id": 1,
+                    "retailer": {"slug": "emag", "name": "eMAG"},
+                    "url": "https://emag.ro/duo",
+                    "title": "Duo",
+                    "seller_name": "Beauty SRL",
+                    "price_bani": 7_450,
+                    "old_price_bani": 8_990,
+                    "currency": "RON",
+                    "in_stock": True,
+                    "last_seen_at": NOW,
+                    "is_cheapest": True,
+                }
+            ]
+        }
+    )
+    assert offer_rows(detail) == [
+        {
+            "": "🏆",
+            "Magazin": "eMAG (vândut de Beauty SRL)",
+            "Preț": "74,50 lei",
+            "Preț vechi": "89,90 lei",
+            "Reducere": "-17%",
+            "Stoc": "În stoc",
+            "Link": "https://emag.ro/duo",
+        }
+    ]
+
+
+def test_history_rows_extend_to_last_seen_and_gap_when_out_of_stock() -> None:
+    history = ProductHistory.model_validate(
+        {
+            "product_id": 1,
+            "series": [
+                {
+                    "offer_id": 1,
+                    "retailer": {"slug": "notino", "name": "Notino"},
+                    "seller_name": None,
+                    "url": "https://notino.ro/duo",
+                    "last_seen_at": NOW,
+                    "points": [
+                        {
+                            "scraped_at": NOW - timedelta(days=9),
+                            "price_bani": 8_990,
+                            "old_price_bani": None,
+                            "in_stock": True,
+                        },
+                        {
+                            "scraped_at": NOW - timedelta(days=3),
+                            "price_bani": 8_990,
+                            "old_price_bani": None,
+                            "in_stock": False,
+                        },
+                    ],
+                },
+                {
+                    "offer_id": 2,
+                    "retailer": {"slug": "emag", "name": "eMAG"},
+                    "seller_name": "X",
+                    "url": "https://emag.ro/duo",
+                    "last_seen_at": NOW - timedelta(days=1),
+                    "points": [],
+                },
+            ],
+        }
+    )
+    assert history_rows(history) == [
+        {"Magazin": "Notino", "Data": NOW - timedelta(days=9), "Preț (lei)": 89.9},
+        {"Magazin": "Notino", "Data": NOW - timedelta(days=3), "Preț (lei)": None},
+        {"Magazin": "Notino", "Data": NOW, "Preț (lei)": None},
+    ]

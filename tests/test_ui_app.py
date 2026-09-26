@@ -151,3 +151,51 @@ def test_bad_product_ids(ui_api: respx.MockRouter, shop: dict[str, int], value: 
         assert "Produsul nu există" in at.error[0].value
     else:
         assert at.title[0].value == "🔎 Caută produse"
+
+
+# --- P7.2: product page ------------------------------------------------------------
+
+
+def _chart_specs(at: AppTest) -> list[str]:
+    return [e.proto.spec for e in at.main if getattr(e, "type", "") == "vega_lite_chart"]
+
+
+def test_product_page_price_table(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    at = run_app({"product": str(shop["duo"])})
+    assert not at.exception
+    assert at.title[0].value == "Effaclar Duo+"
+    assert "de la 74,50 lei · 2 magazine" in markdown(at)
+    table = at.dataframe[0].value
+    assert list(table["Magazin"]) == ["eMAG", "Notino"]  # cheapest first
+    assert list(table[""]) == ["🏆", ""]
+    assert list(table["Preț"]) == ["74,50 lei", "79,90 lei"]
+    assert list(table["Stoc"]) == ["În stoc", "În stoc"]
+    assert list(table["Link"]) == ["https://emag.ro/duo", "https://notino.ro/duo"]
+
+
+def test_product_page_history_chart(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    at = run_app({"product": str(shop["duo"])})
+    [spec] = _chart_specs(at)
+    assert '"step-after"' in spec
+    assert at.selectbox(key="period").value == "90 de zile"
+    at.selectbox(key="period").select("Tot istoricul").run()
+    assert not at.exception
+    assert len(_chart_specs(at)) == 1
+
+
+def test_product_page_out_of_stock_only(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    at = run_app({"product": str(shop["cleanser"])})
+    assert "Stoc epuizat · 1 magazin" in markdown(at)
+    table = at.dataframe[0].value
+    assert (list(table["Stoc"]), list(table[""])) == (["Stoc epuizat"], [""])
+
+
+def test_product_page_without_offers(ui_api: respx.MockRouter, api_session: Session) -> None:
+    product = Product(name="Nou pe piață", normalized_name="nou pe piata")
+    api_session.add(product)
+    api_session.commit()
+    at = run_app({"product": str(product.id)})
+    assert not at.exception
+    infos = [i.value for i in at.info]
+    assert "Niciun magazin nu are încă oferte pentru acest produs." in infos
+    assert "Nu există încă istoric de prețuri." in infos

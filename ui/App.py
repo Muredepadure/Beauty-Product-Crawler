@@ -7,14 +7,18 @@ Talks to the API only through `beautycrawler.ui_client.ApiClient` (base URL from
 product links can be shared.
 """
 
+import altair as alt
+import pandas as pd
 import streamlit as st
 
-from beautycrawler.api.schemas import ProductSummary
+from beautycrawler.api.schemas import ProductDetail, ProductSummary
 from beautycrawler.ui_client import ApiClient, ApiError, NotFound
 from beautycrawler.ui_data import (
     SORT_LABELS,
     card_price_line,
     card_subtitle,
+    history_rows,
+    offer_rows,
     page_count,
     products_label,
 )
@@ -103,6 +107,63 @@ def search_page(api: ApiClient) -> None:
 # ---------------------------------------------------------------------------- product
 
 
+HISTORY_PERIODS: dict[str, int | None] = {
+    "30 de zile": 30,
+    "90 de zile": 90,
+    "1 an": 365,
+    "Tot istoricul": None,
+}
+
+
+def price_table(product: ProductDetail) -> None:
+    rows = offer_rows(product)
+    if not rows:
+        st.info("Niciun magazin nu are încă oferte pentru acest produs.")
+        return
+    frame = pd.DataFrame(rows)
+    cheapest = [bool(r[""]) for r in rows]
+
+    def highlight(row: pd.Series) -> list[str]:
+        style = "background-color: rgba(46, 160, 67, 0.18)" if cheapest[row.name] else ""
+        return [style] * len(row)
+
+    st.dataframe(
+        frame.style.apply(highlight, axis=1),
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "": st.column_config.TextColumn("", width="small"),
+            "Link": st.column_config.LinkColumn("Link", display_text="Deschide ↗"),
+        },
+    )
+
+
+def history_chart(api: ApiClient, product_id: int) -> None:
+    st.subheader("Istoricul prețurilor")
+    label = st.selectbox("Perioada", options=list(HISTORY_PERIODS), index=1, key="period")
+    try:
+        history = api.get_history(product_id, days=HISTORY_PERIODS[label])
+    except ApiError as exc:
+        st.error(f"Nu am putut încărca istoricul: {exc}")
+        return
+    rows = history_rows(history)
+    if not rows:
+        st.info("Nu există încă istoric de prețuri.")
+        return
+    chart = (
+        alt.Chart(pd.DataFrame(rows))
+        .mark_line(interpolate="step-after", point=True)
+        .encode(
+            x=alt.X("Data:T", title=None),
+            y=alt.Y("Preț (lei):Q", scale=alt.Scale(zero=False)),
+            color=alt.Color("Magazin:N", title="Magazin"),
+            tooltip=["Magazin", alt.Tooltip("Data:T", format="%d.%m.%Y %H:%M"), "Preț (lei)"],
+        )
+    )
+    st.altair_chart(chart, width="stretch")
+    st.caption("Prețul se schimbă doar când un magazin îl modifică; golurile = stoc epuizat.")
+
+
 def product_page(api: ApiClient, product_id: int) -> None:
     st.button("← Înapoi la căutare", on_click=close_product)
     try:
@@ -113,10 +174,18 @@ def product_page(api: ApiClient, product_id: int) -> None:
     except ApiError as exc:
         st.error(f"Nu am putut încărca produsul: {exc}")
         return
-    st.title(product.name)
-    subtitle = card_subtitle(product)
-    if subtitle:
-        st.caption(subtitle)
+    left, right = st.columns([1, 3])
+    with left:
+        if product.image_url:
+            st.image(product.image_url, width="stretch")
+    with right:
+        st.title(product.name)
+        subtitle = card_subtitle(product)
+        if subtitle:
+            st.caption(subtitle)
+        st.markdown(card_price_line(product))
+    price_table(product)
+    history_chart(api, product_id)
 
 
 # ------------------------------------------------------------------------------- main
