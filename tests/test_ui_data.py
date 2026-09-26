@@ -10,6 +10,7 @@ from beautycrawler.ui_data import (
     discount_pct,
     format_size,
     history_rows,
+    lei_to_bani,
     offer_rows,
     page_count,
     plural_ro,
@@ -181,3 +182,10 @@ def test_history_rows_extend_to_last_seen_and_gap_when_out_of_stock() -> None:
         {"Magazin": "Notino", "Data": NOW - timedelta(days=3), "Preț (lei)": None},
         {"Magazin": "Notino", "Data": NOW, "Preț (lei)": None},
     ]
+
+
+@pytest.mark.parametrize(
+    ("lei", "bani"), [(None, None), (0, None), (-5, None), (49.9, 4_990), (0.01, 1), (100, 10_000)]
+)
+def test_lei_to_bani(lei: float | None, bani: int | None) -> None:
+    assert lei_to_bani(lei) == bani

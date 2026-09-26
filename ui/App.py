@@ -7,6 +7,8 @@ Talks to the API only through `beautycrawler.ui_client.ApiClient` (base URL from
 product links can be shared.
 """
 
+from typing import Any
+
 import altair as alt
 import pandas as pd
 import streamlit as st
@@ -18,6 +20,7 @@ from beautycrawler.ui_data import (
     card_price_line,
     card_subtitle,
     history_rows,
+    lei_to_bani,
     offer_rows,
     page_count,
     products_label,
@@ -66,6 +69,43 @@ def product_card(product: ProductSummary) -> None:
         )
 
 
+ALL_BRANDS = "Toate brandurile"
+
+
+@st.cache_data(ttl=600)
+def brand_names() -> list[str]:
+    try:
+        return [b.name for b in get_client().list_brands(page_size=200).items]
+    except ApiError:
+        return []
+
+
+def search_filters(api: ApiClient) -> dict[str, Any]:
+    """Sidebar filters (P7.3) as `ApiClient.search_products` keyword arguments."""
+    with st.sidebar:
+        st.header("Filtre")
+        brand = st.selectbox(
+            "Brand", [ALL_BRANDS, *brand_names()], key="brand", on_change=reset_page
+        )
+        category = st.text_input("Categorie", key="category", on_change=reset_page)
+        st.caption("Preț (lei) — 0 înseamnă fără limită")
+        low, high = st.columns(2)
+        min_lei = low.number_input(
+            "De la", min_value=0.0, step=10.0, key="min_lei", on_change=reset_page
+        )
+        max_lei = high.number_input(
+            "Până la", min_value=0.0, step=10.0, key="max_lei", on_change=reset_page
+        )
+        in_stock = st.checkbox("Doar produse în stoc", key="in_stock", on_change=reset_page)
+    return {
+        "brand": None if brand == ALL_BRANDS else brand,
+        "category": category or None,
+        "min_price_bani": lei_to_bani(min_lei),
+        "max_price_bani": lei_to_bani(max_lei),
+        "in_stock": in_stock,
+    }
+
+
 def search_page(api: ApiClient) -> None:
     st.title("🔎 Caută produse")
     st.caption("Compară prețurile produselor cosmetice în magazinele online din România.")
@@ -82,9 +122,12 @@ def search_page(api: ApiClient) -> None:
         key="sort",
         on_change=reset_page,
     )
+    filters = search_filters(api)
     page = int(st.session_state.get("page", 1))
     try:
-        results = api.search_products(q or None, sort=sort, page=page, page_size=PAGE_SIZE)
+        results = api.search_products(
+            q or None, sort=sort, page=page, page_size=PAGE_SIZE, **filters
+        )
     except ApiError as exc:
         st.error(f"Nu am putut încărca produsele: {exc}")
         return

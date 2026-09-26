@@ -73,7 +73,8 @@ uvicorn beautycrawler.api.main:app --reload --port 8000
 - http://localhost:8000/healthz → `{"status": "ok"}`
 - http://localhost:8000/api/products?q=effaclar → product search
   (params: `q` words in name/brand, diacritic-insensitive; `brand` any known alias;
-  `category`; `sort` = `name` | `price_asc` | `price_desc` | `retailers`;
+  `category`; `min_price`/`max_price` in bani on the lowest in-stock price;
+  `in_stock=true`; `sort` = `name` | `price_asc` | `price_desc` | `retailers`;
   `page` ≥ 1; `page_size` 1–100). Prices are integer bani (1 RON = 100 bani).
 - http://localhost:8000/api/products/1 → one product with every retailer's offer
   (in stock by price first; `is_cheapest` marks the lowest in-stock price)

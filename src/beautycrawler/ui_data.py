@@ -110,3 +110,10 @@ def history_rows(history: ProductHistory) -> list[dict[str, object]]:
             last["Data"] = series.last_seen_at
             rows.append(last)
     return rows
+
+
+def lei_to_bani(lei: float | None) -> int | None:
+    """A price typed in lei (0 or empty = no limit) as integer bani."""
+    if not lei or lei <= 0:
+        return None
+    return round(lei * 100)

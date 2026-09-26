@@ -81,6 +81,15 @@ def list_products(
     q: Annotated[str | None, Query(description="Words to find in product name or brand")] = None,
     brand: Annotated[str | None, Query(description="Exact brand (any known alias)")] = None,
     category: Annotated[str | None, Query(description="Exact category")] = None,
+    min_price: Annotated[
+        int | None, Query(ge=0, description="Lowest in-stock price at least this (bani)")
+    ] = None,
+    max_price: Annotated[
+        int | None, Query(ge=0, description="Lowest in-stock price at most this (bani)")
+    ] = None,
+    in_stock: Annotated[
+        bool, Query(description="Only products at least one retailer has in stock")
+    ] = False,
     sort: ProductSort = ProductSort.NAME,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 24,
@@ -97,6 +106,13 @@ def list_products(
         conditions.append(Brand.normalized_name == brand_key(canonical_brand(brand) or brand))
     if category:
         conditions.append(Product.category.in_(_categories_matching(session, category)))
+    # A price filter compares the price you can actually pay, so it implies "in stock".
+    if min_price is not None:
+        conditions.append(stats.c.lowest_price >= min_price)
+    if max_price is not None:
+        conditions.append(stats.c.lowest_price <= max_price)
+    if in_stock:
+        conditions.append(stats.c.lowest_price.is_not(None))
 
     base = (
         select(Product, Brand.name.label("brand_name"), stats)

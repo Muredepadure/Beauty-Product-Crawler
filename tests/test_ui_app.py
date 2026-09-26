@@ -12,6 +12,7 @@ from pathlib import Path
 import httpx
 import pytest
 import respx
+import streamlit as st
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from streamlit.testing.v1 import AppTest
@@ -29,6 +30,7 @@ def ui_api(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> Iterator[resp
     """Point the UI at a fake host and forward its requests to the test app."""
     monkeypatch.setenv("BEAUTYCRAWLER_API_BASE_URL", f"http://{API_HOST}/api")
     get_settings.cache_clear()
+    st.cache_data.clear()  # e.g. the brand list, which differs per test database
 
     def forward(request: httpx.Request) -> httpx.Response:
         r = client.request(request.method, request.url.raw_path.decode())
@@ -199,3 +201,39 @@ def test_product_page_without_offers(ui_api: respx.MockRouter, api_session: Sess
     infos = [i.value for i in at.info]
     assert "Niciun magazin nu are încă oferte pentru acest produs." in infos
     assert "Nu există încă istoric de prețuri." in infos
+
+
+# --- P7.3: filters ---------------------------------------------------------------------
+
+
+def card_names(at: AppTest) -> list[str]:
+    return [m.value.strip("*") for m in at.markdown if m.value.startswith("**")]
+
+
+def test_brand_filter(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    at = run_app()
+    assert at.selectbox(key="brand").options == ["Toate brandurile", "CeraVe", "La Roche-Posay"]
+    at.selectbox(key="brand").select("CeraVe").run()
+    assert card_names(at) == ["Hydrating Cleanser"]
+
+
+def test_category_filter_ignores_diacritics(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    at = run_app()
+    at.text_input(key="category").input("ingrijirea tenului").run()
+    assert card_names(at) == ["Cicaplast Baume B5+", "Effaclar Duo+"]
+
+
+def test_price_range_filter(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    at = run_app()
+    at.number_input(key="min_lei").set_value(60.0).run()
+    assert card_names(at) == ["Effaclar Duo+"]  # 74,50 lei; Cicaplast is 55 lei
+    at.number_input(key="min_lei").set_value(0.0)
+    at.number_input(key="max_lei").set_value(60.0).run()
+    assert card_names(at) == ["Cicaplast Baume B5+"]
+
+
+def test_in_stock_only(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    at = run_app()
+    assert "Hydrating Cleanser" in card_names(at)
+    at.checkbox(key="in_stock").check().run()
+    assert card_names(at) == ["Cicaplast Baume B5+", "Effaclar Duo+"]

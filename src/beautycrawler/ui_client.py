@@ -95,6 +95,9 @@ class ApiClient:
         sort: str = "name",
         page: int = 1,
         page_size: int = 24,
+        min_price_bani: int | None = None,
+        max_price_bani: int | None = None,
+        in_stock: bool = False,
     ) -> ProductPage:
         params = {
             "q": q,
@@ -103,6 +106,9 @@ class ApiClient:
             "sort": sort,
             "page": page,
             "page_size": page_size,
+            "min_price": min_price_bani,
+            "max_price": max_price_bani,
+            "in_stock": "true" if in_stock else None,
         }
         return self._model(ProductPage, "/products", params)
 

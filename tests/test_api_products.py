@@ -320,3 +320,31 @@ def test_product_detail_errors(
     client: TestClient, catalogue: dict[str, int], path: str, status: int
 ) -> None:
     assert client.get(f"/api/products/{path}").status_code == status
+
+
+# --- P7.3: price and stock filters -------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("params", "expected"),
+    [
+        ({"in_stock": "true"}, ["cica", "duo", "revita"]),
+        ({"in_stock": "false"}, ["nobrand", "cica", "duo", "cleanser", "revita"]),
+        ({"max_price": 7_450}, ["cica", "duo"]),  # inclusive; 60 lei out of stock ignored
+        ({"min_price": 7_451}, ["revita"]),
+        ({"min_price": 5_000, "max_price": 8_000}, ["cica", "duo"]),
+        ({"min_price": 100_000}, []),
+        ({"max_price": 0}, []),
+    ],
+)
+def test_price_and_stock_filters(
+    client: TestClient, catalogue: dict[str, int], params: dict[str, Any], expected: list[str]
+) -> None:
+    body = client.get("/api/products", params=params).json()
+    assert ids(body) == [catalogue[k] for k in expected]
+    assert body["total"] == len(expected)
+
+
+@pytest.mark.parametrize("params", [{"min_price": -1}, {"max_price": "x"}, {"in_stock": "maybe"}])
+def test_invalid_price_filters(client: TestClient, params: dict[str, Any]) -> None:
+    assert client.get("/api/products", params=params).status_code == 422
