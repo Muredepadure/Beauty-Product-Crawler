@@ -12,6 +12,34 @@ Blockers / questions for owner: <or "none">
 
 ---
 
+## 2026-09-26 — claude/nightly-2026-09-26-P4.4 — PR (link added when opened)
+Builds on #4 (branch claude/nightly-2026-09-25-P0.1, not merged yet).
+Done:
+- P4.4 product matching: EAN exact → same-brand rapidfuzz match with guards (size/EAN
+  contradictions excluded; different numbers such as SPF 30/50 or shade 110/120 = conflict;
+  one-sided variant markers such as "Duo+" vs "Duo+M" block auto-merge). Only unambiguous
+  matches auto-link; the rest go to the new `match_candidates` review table. Also fixed
+  a P4.3 bug: clean_title dropped a trailing "+" ("B5+", "SPF 50+").
+- P4.5 `python -m beautycrawler.matching run|list|approve|reject`.
+- P5.1 /api/products served from the DB (diacritic-insensitive word search, brand aliases,
+  category, sort, page/page_size); bundled fake JSON removed.
+- P5.2 /api/products/{id} (offers by price, cheapest flagged).
+- P5.3 /api/products/{id}/history (per-offer step series, `days` window).
+- P5.4 /api/retailers, /api/brands.
+- P5.5 /api/compare?brand= seller view (vs market min/median, retailer positions).
+- P6.1 crawl job report (--summary-json), JSON logs, inactive retailers skipped, --match.
+- P6.2 per-retailer crawl interval + `run --due` (hourly cron) + `crawl schedule`.
+Tests: 492/492 passed, lint ✓, format ✓, mypy ✓ (src, scripts, tests)
+Next: P6.3 (stale offers), then P6.4.
+Blockers / questions for owner:
+- P3.1–P3.11 still blocked: retailer domains are denied by this environment's network
+  policy (see the 2026-09-25 entry).
+- Multipacks: offers like "2 x 50 ml" are never auto-linked or turned into products
+  (they wait in review or stay unmatched) until Product/Offer get a `pack_count` column.
+  OK to add it?
+- Pagination on /api/products changed from limit/offset to page/page_size (as the
+  roadmap specifies); the Streamlit UI was adapted.
+
 ## 2026-09-25 — claude/nightly-2026-09-25-P0.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/4
 Done:
 - P0.1 demo data loaded via importlib.resources (works from any CWD / wheel); deps added.
