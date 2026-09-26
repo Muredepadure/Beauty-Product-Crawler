@@ -1,34 +1,315 @@
-﻿import httpx
+"""BeautyCrawler Streamlit UI.
+
+    streamlit run ui/App.py
+
+Talks to the API only through `beautycrawler.ui_client.ApiClient` (base URL from
+`BEAUTYCRAWLER_API_BASE_URL`). A product page is addressed as `?product=<id>`, so
+product links can be shared.
+"""
+
+from typing import Any
+
+import altair as alt
+import pandas as pd
 import streamlit as st
 
-API_BASE = "http://localhost:8000/api"
+from beautycrawler.api.schemas import ProductDetail, ProductSummary
+from beautycrawler.ui_client import ApiClient, ApiError, NotFound
+from beautycrawler.ui_data import (
+    MARKET_BAND_PCT,
+    SORT_LABELS,
+    card_price_line,
+    card_subtitle,
+    format_pct,
+    history_rows,
+    lei_to_bani,
+    matrix_rows,
+    offer_rows,
+    page_count,
+    position_rows,
+    products_label,
+    retailer_rows,
+)
 
-st.set_page_config(page_title="Beauty Product Search", layout="wide")
-st.title("🔎 Beauty Product Search")
+PAGE_SIZE = 24
 
-q = st.text_input("Search by product or brand", placeholder="e.g., serum, lipstick, PureSkin")
-col1, col2, col3 = st.columns(3)
-with col1:
-    brand = st.text_input("Brand (optional)")
-with col2:
-    category = st.text_input("Category (optional)")
-with col3:
-    limit = st.number_input("Results per page", min_value=1, max_value=100, value=24, step=1)
+st.set_page_config(page_title="BeautyCrawler — prețuri cosmetice", page_icon="💄", layout="wide")
 
-if st.button("Search") or q or brand or category:
-    params = {"q": q or None, "brand": brand or None, "category": category or None, "limit": int(limit)}
-    with httpx.Client(timeout=15.0) as client:
-        r = client.get(f"{API_BASE}/products", params=params)
-        r.raise_for_status()
-        data = r.json()
 
-    st.subheader(f"Results ({data['total']})")
-    items = data["items"]
-    cols = st.columns(3)
-    for i, p in enumerate(items):
-        with cols[i % 3]:
-            st.image(p.get("image_url"), use_column_width=True)
-            st.markdown(f"**{p['name']}**")
-            st.caption(f"{p['brand']} • {p.get('category','')}")
-            st.markdown(f"**{p['price']} {p['currency']}**")
-            st.link_button("Go to provider", p["provider"])
+@st.cache_resource
+def get_client() -> ApiClient:
+    return ApiClient()
+
+
+def open_product(product_id: int) -> None:
+    st.query_params["product"] = str(product_id)
+
+
+def close_product() -> None:
+    st.query_params.pop("product", None)
+
+
+def reset_page() -> None:
+    st.session_state["page"] = 1
+
+
+# ----------------------------------------------------------------------------- search
+
+
+def product_card(product: ProductSummary) -> None:
+    with st.container(border=True):
+        if product.image_url:
+            st.image(product.image_url, width="stretch")
+        st.markdown(f"**{product.name}**")
+        subtitle = card_subtitle(product)
+        if subtitle:
+            st.caption(subtitle)
+        st.markdown(card_price_line(product))
+        st.button(
+            "Vezi prețurile",
+            key=f"open-{product.id}",
+            on_click=open_product,
+            args=(product.id,),
+            width="stretch",
+        )
+
+
+ALL_BRANDS = "Toate brandurile"
+
+
+@st.cache_data(ttl=600)
+def brand_names() -> list[str]:
+    try:
+        return [b.name for b in get_client().list_brands(page_size=200).items]
+    except ApiError:
+        return []
+
+
+def search_filters(api: ApiClient) -> dict[str, Any]:
+    """Sidebar filters (P7.3) as `ApiClient.search_products` keyword arguments."""
+    with st.sidebar:
+        st.header("Filtre")
+        brand = st.selectbox(
+            "Brand", [ALL_BRANDS, *brand_names()], key="brand", on_change=reset_page
+        )
+        category = st.text_input("Categorie", key="category", on_change=reset_page)
+        st.caption("Preț (lei) — 0 înseamnă fără limită")
+        low, high = st.columns(2)
+        min_lei = low.number_input(
+            "De la", min_value=0.0, step=10.0, key="min_lei", on_change=reset_page
+        )
+        max_lei = high.number_input(
+            "Până la", min_value=0.0, step=10.0, key="max_lei", on_change=reset_page
+        )
+        in_stock = st.checkbox("Doar produse în stoc", key="in_stock", on_change=reset_page)
+    return {
+        "brand": None if brand == ALL_BRANDS else brand,
+        "category": category or None,
+        "min_price_bani": lei_to_bani(min_lei),
+        "max_price_bani": lei_to_bani(max_lei),
+        "in_stock": in_stock,
+    }
+
+
+def search_page(api: ApiClient) -> None:
+    st.title("🔎 Caută produse")
+    st.caption("Compară prețurile produselor cosmetice în magazinele online din România.")
+    q = st.text_input(
+        "Produs sau brand",
+        key="q",
+        placeholder="ex. Effaclar Duo, CeraVe, ser cu vitamina C",
+        on_change=reset_page,
+    )
+    sort = st.selectbox(
+        "Sortează",
+        options=list(SORT_LABELS),
+        format_func=lambda key: SORT_LABELS[key],
+        key="sort",
+        on_change=reset_page,
+    )
+    filters = search_filters(api)
+    page = int(st.session_state.get("page", 1))
+    try:
+        results = api.search_products(
+            q or None, sort=sort, page=page, page_size=PAGE_SIZE, **filters
+        )
+    except ApiError as exc:
+        st.error(f"Nu am putut încărca produsele: {exc}")
+        return
+
+    if results.total == 0:
+        st.info("Niciun produs găsit. Încearcă alt termen de căutare.")
+        return
+    st.subheader(products_label(results.total))
+    columns = st.columns(3)
+    for i, product in enumerate(results.items):
+        with columns[i % 3]:
+            product_card(product)
+
+    pages = page_count(results.total, PAGE_SIZE)
+    if pages > 1:
+        st.number_input("Pagina", min_value=1, max_value=pages, step=1, key="page")
+        st.caption(f"din {pages}")
+
+
+# ---------------------------------------------------------------------------- product
+
+
+HISTORY_PERIODS: dict[str, int | None] = {
+    "30 de zile": 30,
+    "90 de zile": 90,
+    "1 an": 365,
+    "Tot istoricul": None,
+}
+
+
+def price_table(product: ProductDetail) -> None:
+    rows = offer_rows(product)
+    if not rows:
+        st.info("Niciun magazin nu are încă oferte pentru acest produs.")
+        return
+    frame = pd.DataFrame(rows)
+    cheapest = [bool(r[""]) for r in rows]
+
+    def highlight(row: pd.Series) -> list[str]:
+        style = "background-color: rgba(46, 160, 67, 0.18)" if cheapest[row.name] else ""
+        return [style] * len(row)
+
+    st.dataframe(
+        frame.style.apply(highlight, axis=1),
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "": st.column_config.TextColumn("", width="small"),
+            "Link": st.column_config.LinkColumn("Link", display_text="Deschide ↗"),
+        },
+    )
+
+
+def history_chart(api: ApiClient, product_id: int) -> None:
+    st.subheader("Istoricul prețurilor")
+    label = st.selectbox("Perioada", options=list(HISTORY_PERIODS), index=1, key="period")
+    try:
+        history = api.get_history(product_id, days=HISTORY_PERIODS[label])
+    except ApiError as exc:
+        st.error(f"Nu am putut încărca istoricul: {exc}")
+        return
+    rows = history_rows(history)
+    if not rows:
+        st.info("Nu există încă istoric de prețuri.")
+        return
+    chart = (
+        alt.Chart(pd.DataFrame(rows))
+        .mark_line(interpolate="step-after", point=True)
+        .encode(
+            x=alt.X("Data:T", title=None),
+            y=alt.Y("Preț (lei):Q", scale=alt.Scale(zero=False)),
+            color=alt.Color("Magazin:N", title="Magazin"),
+            tooltip=["Magazin", alt.Tooltip("Data:T", format="%d.%m.%Y %H:%M"), "Preț (lei)"],
+        )
+    )
+    st.altair_chart(chart, width="stretch")
+    st.caption("Prețul se schimbă doar când un magazin îl modifică; golurile = stoc epuizat.")
+
+
+def product_page(api: ApiClient, product_id: int) -> None:
+    st.button("← Înapoi la căutare", on_click=close_product)
+    try:
+        product = api.get_product(product_id)
+    except NotFound:
+        st.error("Produsul nu există (poate a fost șters).")
+        return
+    except ApiError as exc:
+        st.error(f"Nu am putut încărca produsul: {exc}")
+        return
+    left, right = st.columns([1, 3])
+    with left:
+        if product.image_url:
+            st.image(product.image_url, width="stretch")
+    with right:
+        st.title(product.name)
+        subtitle = card_subtitle(product)
+        if subtitle:
+            st.caption(subtitle)
+        st.markdown(card_price_line(product))
+    price_table(product)
+    history_chart(api, product_id)
+
+
+# ------------------------------------------------------------------------- competitors
+
+
+def _pct_color(value: object) -> str:
+    """Cell style for % vs median: green below the market, red above."""
+    if not isinstance(value, int | float):
+        return ""
+    if value < -MARKET_BAND_PCT:
+        return "background-color: rgba(46, 160, 67, 0.20)"
+    if value > MARKET_BAND_PCT:
+        return "background-color: rgba(218, 54, 51, 0.20)"
+    return ""
+
+
+def competitors_page(api: ApiClient) -> None:
+    st.title("🏷️ Comparație prețuri")
+    st.caption(
+        "Pentru vânzători: prețul fiecărui magazin față de piață (minimul și mediana "
+        "prețurilor în stoc, câte unul per magazin)."
+    )
+    brands = brand_names()
+    if not brands:
+        st.info("Nu există încă branduri în baza de date.")
+        return
+    brand = st.selectbox("Brand", brands, key="cmp_brand")
+    try:
+        comparison = api.compare(brand)
+    except ApiError as exc:
+        st.error(f"Nu am putut încărca comparația: {exc}")
+        return
+    if not comparison.products:
+        st.info(f"Niciun produs {brand} nu are încă oferte.")
+        return
+
+    st.subheader("Poziția magazinelor")
+    st.dataframe(pd.DataFrame(position_rows(comparison)), hide_index=True, width="stretch")
+
+    st.subheader("Față de mediana pieței, pe produs")
+    matrix = pd.DataFrame(matrix_rows(comparison))
+    stores = [c for c in matrix.columns if c != "Produs"]
+    st.dataframe(
+        matrix.style.map(_pct_color, subset=stores).format(
+            lambda v: format_pct(v) if pd.notna(v) else "—",
+            subset=stores,
+        ),
+        hide_index=True,
+        width="stretch",
+    )
+
+    slugs = {p.retailer.name: p.retailer.slug for p in comparison.retailers}
+    store = st.selectbox("Detalii pentru magazinul", list(slugs), key="cmp_store")
+    rows = retailer_rows(comparison, slugs[store])
+    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+    under = sum(r["Poziție"] == "Sub piață" for r in rows)
+    over = sum(r["Poziție"] == "Peste piață" for r in rows)
+    st.markdown(f"**{store}**: {under} sub piață, {over} peste piață, din {len(rows)} listate.")
+
+
+# ------------------------------------------------------------------------------- main
+
+PAGES = {"🔎 Caută produse": search_page, "🏷️ Comparație prețuri": competitors_page}
+
+
+def main() -> None:
+    api = get_client()
+    raw_id = st.query_params.get("product")
+    if raw_id is not None:
+        if raw_id.isdigit():
+            product_page(api, int(raw_id))
+            return
+        close_product()
+    with st.sidebar:
+        choice = st.radio("Pagina", list(PAGES), key="nav")
+    PAGES[choice](api)
+
+
+main()
