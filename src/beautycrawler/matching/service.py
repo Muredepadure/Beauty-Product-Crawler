@@ -95,7 +95,7 @@ def _get_or_create_brand(session: Session, raw: str) -> Brand:
     return brand
 
 
-def _link(session: Session, offer: Offer, product: Product) -> None:
+def link_offer(session: Session, offer: Offer, product: Product) -> None:
     """Link and enrich the product with facts the offer knows and it doesn't."""
     offer.product = product
     if offer.id is not None:
@@ -217,7 +217,7 @@ def match_offer(
     if offer.ean:
         by_ean = session.scalars(select(Product).where(Product.ean == offer.ean)).one_or_none()
         if by_ean is not None:
-            _link(session, offer, by_ean)
+            link_offer(session, offer, by_ean)
             session.flush()
             return MatchResult(offer, MatchMethod.EAN, by_ean)
 
@@ -231,7 +231,7 @@ def match_offer(
         clear_winner = runner_up is None or best.score - runner_up >= config.ambiguity_margin
         confident = best.score >= config.auto_threshold and not best.doubts
         if confident and clear_winner:
-            _link(session, offer, best.product)
+            link_offer(session, offer, best.product)
             session.flush()
             return MatchResult(offer, MatchMethod.FUZZY, best.product, candidates)
         if confident:
@@ -253,7 +253,7 @@ def match_offer(
         return MatchResult(offer, MatchMethod.UNMATCHED, note=f"multipack of {count}")
     size, _ = offer_size(offer.title, offer.size_value, offer.size_unit)
     product = _new_product(session, offer, size)
-    _link(session, offer, product)
+    link_offer(session, offer, product)
     session.flush()
     return MatchResult(offer, MatchMethod.NEW_PRODUCT, product)
 

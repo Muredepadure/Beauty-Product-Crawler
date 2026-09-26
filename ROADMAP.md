@@ -70,7 +70,7 @@ Each spider task: parser + fixture tests + discovery (prefer sitemaps) + a `--li
 - [x] **P4.2** Size/unit parsing from titles: ml, l, g, kg, buc; multipacks ("2 x 50 ml").
 - [x] **P4.3** Title cleanup: strip retailer noise ("Promo", "-20%", gift mentions).
 - [x] **P4.4** Product matching: 1) EAN/GTIN exact; 2) brand + normalized name + size with `rapidfuzz` threshold; ambiguous matches go to a review table rather than auto-merging. Tests with realistic cross-retailer pairs.
-- [ ] **P4.5** Admin CLI to list/approve/reject ambiguous matches.
+- [x] **P4.5** Admin CLI to list/approve/reject ambiguous matches.
 
 ## Phase 5 — API v1 (DB-backed)
 

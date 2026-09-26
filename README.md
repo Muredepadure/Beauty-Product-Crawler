@@ -86,6 +86,20 @@ python -m beautycrawler.crawler run --all
 Offers are upserted into the database; price history gets a row only when price or
 stock changes. No retailer spiders exist yet (see Phase 3 in `ROADMAP.md`).
 
+### Match offers to products
+
+```bash
+python -m beautycrawler.matching run              # link unmatched offers (EAN, then name)
+python -m beautycrawler.matching list             # ambiguous matches waiting for review
+python -m beautycrawler.matching approve 12       # offer of candidate #12 -> its product
+python -m beautycrawler.matching reject 12 13     # different products; re-match the offer
+```
+
+Offers are linked by EAN/GTIN when possible, otherwise by brand + name + size. Only
+unambiguous name matches are linked automatically; anything uncertain (variant
+markers such as "Duo+" vs "Duo+M", unknown size, multipacks, two close candidates)
+waits in the `match_candidates` review table.
+
 ### Run the UI
 
 In a second terminal (API must be running):
@@ -134,6 +148,9 @@ What exists today:
 │   │   └── routers/products.py  # /api/products (demo data for now)
 │   ├── crawler/                 # spiders go in crawler/spiders/<retailer>.py (Phase 3)
 │   ├── db/                      # SQLAlchemy models, engine/session, Alembic migrations
+│   ├── extractors/              # JSON-LD and Romanian price parsing
+│   ├── normalization/           # brand aliases, sizes, title cleanup
+│   ├── matching/                # offer -> product matching + review CLI
 │   ├── data/products.json       # bundled demo dataset
 │   └── config.py                # pydantic-settings configuration
 ├── ui/App.py                    # Streamlit UI
