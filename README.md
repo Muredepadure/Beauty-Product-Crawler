@@ -101,6 +101,20 @@ the crawl; `--summary-json` writes a machine-readable run report (per-retailer s
 duration, pages, offers, errors; totals); `--log-format json` emits one JSON object per
 log line with `event` (`crawl_finished`, `crawl_failed`, `crawl_skipped`) and `retailer`.
 
+### Schedule crawls
+
+Each retailer has a crawl interval (default 24 h). `run --due` crawls only retailers
+whose interval has passed since their last successful crawl (a failed crawl is retried
+on the next run), so one hourly cron entry is the whole scheduler:
+
+```bash
+python -m beautycrawler.crawler schedule                                  # intervals, last/next crawl
+python -m beautycrawler.crawler schedule --retailer notino --every-hours 12
+
+# crontab -e  (one line; minute 17 of every hour, any minute works)
+17 * * * * cd /srv/beautycrawler && .venv/bin/python -m beautycrawler.crawler --log-format json run --all --due --match >> logs/crawl.jsonl 2>&1
+```
+
 Offers are upserted into the database; price history gets a row only when price or
 stock changes. No retailer spiders exist yet (see Phase 3 in `ROADMAP.md`).
 

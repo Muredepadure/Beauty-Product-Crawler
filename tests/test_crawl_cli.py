@@ -1,7 +1,7 @@
 import json
 import logging
 from collections.abc import AsyncIterator, Callable, Iterator
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -336,3 +336,127 @@ async def test_run_many_measures_each_retailer(
     assert [s.duration_seconds for s in report.summaries] == [2.5, 1.0]
     assert [s.status for s in report.summaries] == ["ok", "failed"]
     assert report.ok is False
+
+
+# --- P6.2: per-retailer schedule ------------------------------------------------------
+
+
+def _retailer(engine: Engine) -> Retailer:
+    with Session(engine) as s:
+        return s.scalars(select(Retailer).where(Retailer.slug == "clitest")).one()
+
+
+def test_successful_crawl_stamps_last_crawled_at(
+    mock: respx.MockRouter, db: tuple[str, Engine], settings: Settings, fake_time: FakeTime
+) -> None:
+    url, engine = db
+    before = datetime.now(UTC)
+    main(
+        ["run", "--retailer", "clitest", "--database-url", url],
+        fetcher_factory(settings, fake_time),
+    )
+    stamped = _retailer(engine).last_crawled_at
+    assert stamped is not None
+    assert stamped.replace(tzinfo=UTC) >= before
+
+
+def test_failed_crawl_is_not_stamped(
+    mock: respx.MockRouter, db: tuple[str, Engine], settings: Settings, fake_time: FakeTime
+) -> None:
+    url, engine = db
+    main(
+        ["run", "--retailer", "clitest-broken", "--database-url", url],
+        fetcher_factory(settings, fake_time),
+    )
+    with Session(engine) as s:
+        broken = s.scalars(select(Retailer).where(Retailer.slug == "clitest-broken")).one()
+        assert broken.last_crawled_at is None  # so the next --due run retries it
+
+
+@pytest.mark.parametrize(
+    ("hours_ago", "interval", "crawled"),
+    [(None, 24, True), (1, 24, False), (25, 24, True), (7, 6, True), (5, 6, False)],
+)
+def test_due_only(
+    mock: respx.MockRouter,
+    db: tuple[str, Engine],
+    settings: Settings,
+    fake_time: FakeTime,
+    capsys: pytest.CaptureFixture[str],
+    hours_ago: int | None,
+    interval: int,
+    crawled: bool,
+) -> None:
+    url, engine = db
+    last = datetime.now(UTC) - timedelta(hours=hours_ago) if hours_ago is not None else None
+    with Session(engine) as s:
+        s.add(
+            Retailer(
+                slug="clitest",
+                name="Shop",
+                domain="clitest.example.ro",
+                crawl_interval_hours=interval,
+                last_crawled_at=last,
+            )
+        )
+        s.commit()
+    argv = ["run", "--retailer", "clitest", "--due", "--database-url", url]
+    assert main(argv, fetcher_factory(settings, fake_time)) == 0
+    out = capsys.readouterr().out
+    assert (count(engine, Offer) == 1) is crawled
+    assert ("skipped: not due until" in out) is not crawled
+
+
+def test_due_for_retailer_never_seen(
+    mock: respx.MockRouter, db: tuple[str, Engine], settings: Settings, fake_time: FakeTime
+) -> None:
+    url, engine = db  # no Retailer row yet: never crawled, so due
+    argv = ["run", "--retailer", "clitest", "--due", "--database-url", url]
+    assert main(argv, fetcher_factory(settings, fake_time)) == 0
+    assert count(engine, Offer) == 1
+
+
+def test_schedule_show_and_set(db: tuple[str, Engine], capsys: pytest.CaptureFixture[str]) -> None:
+    url, engine = db
+    assert main(["schedule", "--database-url", url]) == 0
+    assert "No retailers in the database" in capsys.readouterr().out
+    with Session(engine) as s:
+        s.add(Retailer(slug="clitest", name="Shop", domain="clitest.example.ro"))
+        s.add(
+            Retailer(
+                slug="other",
+                name="Other",
+                domain="other.ro",
+                is_active=False,
+                last_crawled_at=datetime(2026, 9, 25, 10, 0, tzinfo=UTC),
+            )
+        )
+        s.commit()
+    assert (
+        main(["schedule", "--retailer", "clitest", "--every-hours", "6", "--database-url", url])
+        == 0
+    )
+    out = capsys.readouterr().out
+    assert "clitest         every   6 h  last never             next now" in out
+    assert (
+        "other           every  24 h  last 2026-09-25 10:00  next 2026-09-26 10:00  (inactive)"
+        in out
+    )
+    assert _retailer(engine).crawl_interval_hours == 6
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        (["--retailer", "clitest"], "go together"),
+        (["--every-hours", "3"], "go together"),
+        (["--retailer", "clitest", "--every-hours", "0"], ">= 1"),
+        (["--retailer", "nope", "--every-hours", "3"], "Unknown retailer: nope"),
+    ],
+)
+def test_schedule_errors(
+    db: tuple[str, Engine], capsys: pytest.CaptureFixture[str], args: list[str], message: str
+) -> None:
+    url, _ = db
+    assert main(["schedule", *args, "--database-url", url]) == 2
+    assert message in capsys.readouterr().err

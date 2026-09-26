@@ -40,12 +40,17 @@ MATCH_STATUSES = ("pending", "approved", "rejected")
 
 class Retailer(TimestampMixin, Base):
     __tablename__ = "retailers"
+    __table_args__ = (CheckConstraint("crawl_interval_hours > 0", name="crawl_interval_positive"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     slug: Mapped[str] = mapped_column(String(50), unique=True)
     name: Mapped[str] = mapped_column(String(200))
     domain: Mapped[str] = mapped_column(String(200), unique=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Scheduling (P6.2): `crawl run --due` crawls a retailer once this many hours have
+    # passed since its last successful crawl.
+    crawl_interval_hours: Mapped[int] = mapped_column(Integer, default=24, server_default="24")
+    last_crawled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     offers: Mapped[list["Offer"]] = relationship(back_populates="retailer")
 

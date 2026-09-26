@@ -3,8 +3,11 @@
     python -m beautycrawler.crawler list
     python -m beautycrawler.crawler run --retailer notino [--limit N]
     python -m beautycrawler.crawler run --all [--limit N]
+    python -m beautycrawler.crawler run --all --due      # hourly cron entry point
+    python -m beautycrawler.crawler schedule [--retailer SLUG --every-hours N]
 
-Options for `run`: `--match` links new offers to products afterwards;
+Options for `run`: `--due` skips retailers crawled within their interval;
+`--match` links new offers to products afterwards;
 `--summary-json PATH` writes the run report; `--include-inactive` also crawls retailers
 marked inactive in the database. `--log-format json` (before the command) gives one JSON
 log object per line. Exit code 1 when any retailer failed.
@@ -19,9 +22,12 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from sqlalchemy import select
+
 from beautycrawler.config import get_settings
 from beautycrawler.crawler.fetcher import PoliteFetcher
-from beautycrawler.crawler.runner import RunReport, load_spiders, run_many
+from beautycrawler.crawler.runner import RunReport, load_spiders, next_due, run_many
+from beautycrawler.db.models import Retailer
 from beautycrawler.db.session import make_engine, make_session_factory
 from beautycrawler.logs import configure_logging
 from beautycrawler.matching.service import match_unmatched
@@ -46,7 +52,55 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--include-inactive", action="store_true", help="also crawl retailers marked inactive"
     )
+    run.add_argument(
+        "--due", action="store_true", help="only retailers whose crawl interval has passed"
+    )
+
+    schedule = sub.add_parser("schedule", help="show or set per-retailer crawl intervals")
+    schedule.add_argument("--retailer", metavar="SLUG", help="retailer to change")
+    schedule.add_argument("--every-hours", type=int, metavar="N", help="new interval (hours)")
+    schedule.add_argument("--database-url", help="override DATABASE_URL")
     return parser
+
+
+def _schedule(args: argparse.Namespace) -> int:
+    if (args.retailer is None) != (args.every_hours is None):
+        print("--retailer and --every-hours go together", file=sys.stderr)
+        return 2
+    if args.every_hours is not None and args.every_hours < 1:
+        print("--every-hours must be >= 1", file=sys.stderr)
+        return 2
+    engine = make_engine(args.database_url)
+    try:
+        with make_session_factory(engine)() as session:
+            if args.retailer is not None:
+                retailer = session.scalars(
+                    select(Retailer).where(Retailer.slug == args.retailer)
+                ).one_or_none()
+                if retailer is None:
+                    print(f"Unknown retailer: {args.retailer}", file=sys.stderr)
+                    return 2
+                retailer.crawl_interval_hours = args.every_hours
+                session.commit()
+            retailers = session.scalars(select(Retailer).order_by(Retailer.slug)).all()
+            if not retailers:
+                print("No retailers in the database (run scripts/seed.py).")
+            else:
+                print("Times are UTC.")
+            for r in retailers:
+                last = (
+                    r.last_crawled_at.strftime("%Y-%m-%d %H:%M") if r.last_crawled_at else "never"
+                )
+                due = next_due(r)
+                due_text = due.strftime("%Y-%m-%d %H:%M") if due else "now"
+                state = "" if r.is_active else "  (inactive)"
+                print(
+                    f"{r.slug:15} every {r.crawl_interval_hours:>3} h  last {last:16}  "
+                    f"next {due_text}{state}"
+                )
+    finally:
+        engine.dispose()
+    return 0
 
 
 async def _run(
@@ -57,7 +111,12 @@ async def _run(
         factory = make_session_factory(engine)
         async with fetcher_factory() as fetcher:
             report = await run_many(
-                slugs, factory, fetcher, args.limit, include_inactive=args.include_inactive
+                slugs,
+                factory,
+                fetcher,
+                args.limit,
+                include_inactive=args.include_inactive,
+                due_only=args.due,
             )
         matched = None
         if args.match:
@@ -80,6 +139,8 @@ def main(argv: list[str] | None = None, fetcher_factory: FetcherFactory | None =
         for slug, cls in sorted(spiders.items()):
             print(f"{slug:15} {cls.name:25} {cls.base_url}")
         return 0
+    if args.command == "schedule":
+        return _schedule(args)
 
     if args.limit is not None and args.limit < 1:
         print("--limit must be >= 1", file=sys.stderr)

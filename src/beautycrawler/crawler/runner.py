@@ -4,6 +4,10 @@
 site is recorded and the next one runs), each emitting a structured `crawl_finished` /
 `crawl_failed` log event; `RunReport` sums the run up for the CLI and schedulers.
 Retailers marked inactive in the database (e.g. blocked, see CLAUDE.md) are skipped.
+
+Scheduling (P6.2): a successful crawl stamps `Retailer.last_crawled_at`; with `due_only`
+a retailer is crawled only once its `crawl_interval_hours` have passed, so an hourly cron
+job running `crawl run --all --due` gives every retailer its own frequency.
 """
 
 import importlib
@@ -13,7 +17,7 @@ import time
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -146,6 +150,7 @@ async def run_spider(
             if pending >= COMMIT_EVERY:
                 session.commit()
                 pending = 0
+        retailer.last_crawled_at = datetime.now(UTC)
         session.commit()
     return summary
 
@@ -160,6 +165,27 @@ def inactive_retailers(session_factory: sessionmaker[Session], slugs: list[str])
         )
 
 
+def _as_utc(dt: datetime) -> datetime:
+    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
+
+
+def next_due(retailer: Retailer) -> datetime | None:
+    """When the retailer is next due for a crawl (None: never crawled, due now)."""
+    if retailer.last_crawled_at is None:
+        return None
+    return _as_utc(retailer.last_crawled_at) + timedelta(hours=retailer.crawl_interval_hours)
+
+
+def not_due_retailers(
+    session_factory: sessionmaker[Session], slugs: list[str], now: datetime
+) -> dict[str, datetime]:
+    """slug -> next due time, for retailers crawled more recently than their interval.
+    Retailers without a row yet have never been crawled, so they are due."""
+    with session_factory() as session:
+        retailers = session.scalars(select(Retailer).where(Retailer.slug.in_(slugs)))
+        return {r.slug: due for r in retailers if (due := next_due(r)) is not None and due > now}
+
+
 async def run_many(
     slugs: list[str],
     session_factory: sessionmaker[Session],
@@ -167,21 +193,28 @@ async def run_many(
     limit: int | None = None,
     *,
     include_inactive: bool = False,
+    due_only: bool = False,
     clock: Callable[[], float] = time.monotonic,
 ) -> RunReport:
     """Run retailers one after another; one failing retailer doesn't stop the others."""
     started_at = datetime.now(UTC)
     inactive = set() if include_inactive else inactive_retailers(session_factory, slugs)
+    not_due = not_due_retailers(session_factory, slugs, started_at) if due_only else {}
     summaries = []
     for slug in slugs:
+        reason = None
         if slug in inactive:
-            summary = RunSummary(retailer=slug, skipped="retailer is marked inactive")
+            reason = "retailer is marked inactive"
+        elif slug in not_due:
+            reason = f"not due until {not_due[slug].isoformat(timespec='minutes')}"
+        if reason is not None:
             log.info(
-                "%s: skipped (inactive)",
+                "%s: skipped (%s)",
                 slug,
-                extra={"event": "crawl_skipped", "retailer": slug},
+                reason,
+                extra={"event": "crawl_skipped", "retailer": slug, "reason": reason},
             )
-            summaries.append(summary)
+            summaries.append(RunSummary(retailer=slug, skipped=reason))
             continue
         start = clock()
         try:
