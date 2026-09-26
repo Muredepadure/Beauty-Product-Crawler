@@ -93,7 +93,7 @@ Each spider task: parser + fixture tests + discovery (prefer sitemaps) + a `--li
 - [ ] **P7.2** Product page: price table across retailers (cheapest highlighted, stock, link out) + price-history chart.
 - [ ] **P7.3** Filters: brand, category, price range, in-stock only.
 - [ ] **P7.4** Competitor view: pick a brand/retailer, see where it's over/under market price.
-- [ ] **P7.5** UI talks to the API via a small client module; API base URL from config.
+- [x] **P7.5** UI talks to the API via a small client module; API base URL from config.
 
 ## Phase 8 — Packaging & deployment
 
