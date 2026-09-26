@@ -7,6 +7,10 @@
   row **only** when the price or stock status changed;
 - observation older than the offer's `last_seen_at` (e.g. a delayed retry) → ignored,
   so it can't overwrite newer data.
+
+`record_missed` is the other half (P6.3): after a complete crawl, listings the crawl
+didn't see count a miss; at `stale_after` misses in a row they are marked out of stock
+(with a history row, so charts show when they became unavailable).
 """
 
 import enum
@@ -112,6 +116,7 @@ def upsert_offer(
         if value is not None:
             setattr(offer, field, value)
     offer.last_seen_at = seen
+    offer.missed_runs = 0
     offer.old_price_bani = snapshot.old_price_bani
     offer.currency = snapshot.currency
 
@@ -131,3 +136,46 @@ def _history_row(snapshot: OfferSnapshot, seen: datetime) -> PriceHistory:
         in_stock=snapshot.in_stock,
         scraped_at=seen,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class MissedResult:
+    missed: int  # listings not seen by this crawl
+    marked_out_of_stock: int  # of those, newly marked out of stock
+
+
+def record_missed(
+    session: Session,
+    retailer: Retailer,
+    crawl_started_at: datetime,
+    stale_after: int,
+    now: datetime | None = None,
+) -> MissedResult:
+    """Count a miss for the retailer's offers not seen since `crawl_started_at`.
+
+    Call only after a *complete* crawl (not a `--limit` sample or a failed run).
+    Flushes; does not commit.
+    """
+    if stale_after < 1:
+        raise ValueError("stale_after must be >= 1")
+    started = _as_utc(crawl_started_at)
+    at = _as_utc(now) if now is not None else utcnow()
+    missed = marked = 0
+    for offer in session.scalars(select(Offer).where(Offer.retailer_id == retailer.id)):
+        if _as_utc(offer.last_seen_at) >= started:
+            continue
+        missed += 1
+        offer.missed_runs += 1
+        if offer.missed_runs >= stale_after and offer.in_stock:
+            offer.in_stock = False
+            offer.history.append(
+                PriceHistory(
+                    price_bani=offer.price_bani,
+                    old_price_bani=offer.old_price_bani,
+                    in_stock=False,
+                    scraped_at=at,
+                )
+            )
+            marked += 1
+    session.flush()
+    return MissedResult(missed, marked)

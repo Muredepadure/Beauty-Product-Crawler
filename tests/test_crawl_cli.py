@@ -15,6 +15,7 @@ from beautycrawler.config import Settings
 from beautycrawler.crawler import runner
 from beautycrawler.crawler.__main__ import main
 from beautycrawler.crawler.fetcher import PoliteFetcher
+from beautycrawler.crawler.runner import RunSummary
 from beautycrawler.crawler.spider import JsonLdSpider, register
 from beautycrawler.db import Base, Offer, PriceHistory, Retailer
 from beautycrawler.db.session import make_engine, make_session_factory
@@ -460,3 +461,70 @@ def test_schedule_errors(
     url, _ = db
     assert main(["schedule", *args, "--database-url", url]) == 2
     assert message in capsys.readouterr().err
+
+
+# --- P6.3: listings the crawl no longer finds ------------------------------------------
+
+
+def _add_vanished_offer(engine: Engine) -> None:
+    """A listing stored by an earlier crawl that the sitemap no longer lists."""
+    with Session(engine) as s:
+        retailer = Retailer(slug="clitest", name="Shop", domain="clitest.example.ro")
+        s.add(
+            Offer(
+                retailer=retailer,
+                url=f"{BASE}/p/discontinued",
+                title="Old product",
+                price_bani=1_000,
+                in_stock=True,
+                last_seen_at=datetime.now(UTC) - timedelta(days=1),
+            )
+        )
+        s.commit()
+
+
+def _vanished(engine: Engine) -> Offer:
+    with Session(engine) as s:
+        return s.scalars(select(Offer).where(Offer.url == f"{BASE}/p/discontinued")).one()
+
+
+async def _run(engine: Engine, settings: Settings, fake_time: FakeTime, **kw: int) -> RunSummary:
+    async with PoliteFetcher(settings, sleep=fake_time.sleep, clock=fake_time.clock) as f:
+        return await runner.run_spider("clitest", make_session_factory(engine), f, **kw)
+
+
+async def test_complete_crawl_counts_misses(
+    mock: respx.MockRouter, db: tuple[str, Engine], settings: Settings, fake_time: FakeTime
+) -> None:
+    _, engine = db
+    _add_vanished_offer(engine)
+    summary = await _run(engine, settings, fake_time, stale_after=2)
+    assert (summary.missed, summary.marked_out_of_stock) == (1, 0)
+    assert (_vanished(engine).missed_runs, _vanished(engine).in_stock) == (1, True)
+
+    summary = await _run(engine, settings, fake_time, stale_after=2)
+    assert (summary.missed, summary.marked_out_of_stock) == (1, 1)
+    assert "1 not seen (1 marked out of stock)" in summary.line()
+    assert _vanished(engine).in_stock is False
+    assert summary.to_dict()["marked_out_of_stock"] == 1
+
+
+async def test_limited_crawl_does_not_count_misses(
+    mock: respx.MockRouter, db: tuple[str, Engine], settings: Settings, fake_time: FakeTime
+) -> None:
+    _, engine = db
+    _add_vanished_offer(engine)
+    summary = await _run(engine, settings, fake_time, limit=1, stale_after=1)
+    assert summary.missed is None
+    assert _vanished(engine).missed_runs == 0
+
+
+async def test_crawl_finding_nothing_does_not_count_misses(
+    mock: respx.MockRouter, db: tuple[str, Engine], settings: Settings, fake_time: FakeTime
+) -> None:
+    _, engine = db
+    _add_vanished_offer(engine)
+    mock.get(f"{BASE}/sm.xml").mock(return_value=httpx.Response(200, text=urlset()))
+    summary = await _run(engine, settings, fake_time, stale_after=1)
+    assert (summary.stats.offers, summary.missed) == (0, None)
+    assert (_vanished(engine).missed_runs, _vanished(engine).in_stock) == (0, True)

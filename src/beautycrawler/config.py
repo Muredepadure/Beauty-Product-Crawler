@@ -40,6 +40,11 @@ class Settings(BaseSettings):
         default=2.0, gt=0, description="Base for exponential backoff between retries."
     )
     robots_cache_ttl_seconds: int = Field(default=24 * 3600, ge=0)
+    stale_after_runs: int = Field(
+        default=3,
+        ge=1,
+        description="Mark an offer out of stock after this many complete crawls miss it.",
+    )
     api_base_url: str = Field(
         default="http://localhost:8000/api", description="Used by the Streamlit UI."
     )

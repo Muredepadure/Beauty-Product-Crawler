@@ -12,7 +12,7 @@ Blockers / questions for owner: <or "none">
 
 ---
 
-## 2026-09-26 — claude/nightly-2026-09-26-P4.4 — PR (link added when opened)
+## 2026-09-26 — claude/nightly-2026-09-26-P4.4 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/5
 Builds on #4 (branch claude/nightly-2026-09-25-P0.1, not merged yet).
 Done:
 - P4.4 product matching: EAN exact → same-brand rapidfuzz match with guards (size/EAN

@@ -101,6 +101,10 @@ the crawl; `--summary-json` writes a machine-readable run report (per-retailer s
 duration, pages, offers, errors; totals); `--log-format json` emits one JSON object per
 log line with `event` (`crawl_finished`, `crawl_failed`, `crawl_skipped`) and `retailer`.
 
+Listings a complete crawl (no `--limit`, at least one offer found) doesn't see count a
+miss; after `BEAUTYCRAWLER_STALE_AFTER_RUNS` (default 3) misses in a row they are marked
+out of stock, with a history row. Seeing the listing again resets the count.
+
 ### Schedule crawls
 
 Each retailer has a crawl interval (default 24 h). `run --due` crawls only retailers

@@ -134,6 +134,9 @@ class Offer(TimestampMixin, Base):
     in_stock: Mapped[bool] = mapped_column(Boolean, default=True)
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # Complete crawls of the retailer in a row that didn't see this listing (P6.3);
+    # reset when seen. At `settings.stale_after_runs` the offer is marked out of stock.
+    missed_runs: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     retailer: Mapped[Retailer] = relationship(back_populates="offers")
     product: Mapped[Product | None] = relationship(back_populates="offers")

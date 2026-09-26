@@ -24,11 +24,12 @@ from urllib.parse import urlsplit
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from beautycrawler.config import get_settings
 from beautycrawler.crawler import spiders as spiders_pkg
 from beautycrawler.crawler.fetcher import PoliteFetcher
 from beautycrawler.crawler.spider import CrawlStats, Spider, get_spider, registered_spiders
 from beautycrawler.db.models import Retailer
-from beautycrawler.db.repository import upsert_offer
+from beautycrawler.db.repository import record_missed, upsert_offer
 
 log = logging.getLogger(__name__)
 
@@ -43,6 +44,8 @@ class RunSummary:
     failed: str | None = None  # set when the whole run aborted
     skipped: str | None = None  # set when the retailer was not crawled at all
     duration_seconds: float = 0.0
+    missed: int | None = None  # listings not seen; None when misses weren't counted
+    marked_out_of_stock: int = 0
 
     def line(self) -> str:
         if self.skipped:
@@ -54,6 +57,11 @@ class RunSummary:
             f"{self.retailer}: {self.stats.pages_fetched} pages, {self.stats.offers} offers "
             f"({o['created']} new, {o['changed']} changed, {o['unchanged']} unchanged, "
             f"{o['stale']} stale), {len(self.stats.errors)} errors"
+            + (
+                f", {self.missed} not seen ({self.marked_out_of_stock} marked out of stock)"
+                if self.missed
+                else ""
+            )
         )
 
     @property
@@ -71,6 +79,8 @@ class RunSummary:
             "offers": self.stats.offers,
             "pages_without_offers": self.stats.pages_without_offers,
             "outcomes": {k: self.outcomes[k] for k in ("created", "changed", "unchanged", "stale")},
+            "missed": self.missed,
+            "marked_out_of_stock": self.marked_out_of_stock,
             "errors": list(self.stats.errors),
         }
 
@@ -131,11 +141,19 @@ async def run_spider(
     session_factory: sessionmaker[Session],
     fetcher: PoliteFetcher,
     limit: int | None = None,
+    stale_after: int | None = None,
 ) -> RunSummary:
-    """Crawl one retailer and upsert every offer. Commits in batches."""
+    """Crawl one retailer and upsert every offer. Commits in batches.
+
+    After a complete crawl (no `limit`, at least one offer found) listings it didn't see
+    count a miss; `stale_after` misses (default: settings) mark them out of stock. A
+    crawl that finds nothing is more likely a broken sitemap than an empty shop, so it
+    doesn't count.
+    """
     spider_cls = get_spider(slug)
     summary = RunSummary(retailer=slug)
     spider = spider_cls(fetcher)
+    started = datetime.now(UTC)
     with session_factory() as session:
         retailer = get_or_create_retailer(session, spider_cls)
         session.commit()
@@ -150,6 +168,10 @@ async def run_spider(
             if pending >= COMMIT_EVERY:
                 session.commit()
                 pending = 0
+        if limit is None and summary.stats.offers > 0:
+            threshold = stale_after if stale_after is not None else get_settings().stale_after_runs
+            missed = record_missed(session, retailer, started, threshold)
+            summary.missed, summary.marked_out_of_stock = missed.missed, missed.marked_out_of_stock
         retailer.last_crawled_at = datetime.now(UTC)
         session.commit()
     return summary
