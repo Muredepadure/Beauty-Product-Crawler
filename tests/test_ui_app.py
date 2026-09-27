@@ -314,14 +314,17 @@ def test_competitor_view(ui_api: respx.MockRouter, shop: dict[str, int]) -> None
     at = open_competitors()
     assert at.title[0].value == "🏷️ Comparație prețuri"
     at.selectbox(key="cmp_brand").select("La Roche-Posay").run()
-    positions, matrix, detail = (d.value for d in at.dataframe)
+    matrix, detail = (d.value for d in at.dataframe)
 
     # duo: emag 74,50 / notino 79,90 -> median 77,20; cica: notino 55 / emag 65 -> median 60
-    assert list(positions["Magazin"]) == ["eMAG", "Notino"]
-    assert list(positions["Cel mai ieftin la"]) == [1, 1]
+    [cards] = [m.value for m in at.markdown if m.value.startswith('<div class="bc-stats">')]
+    stores = re.findall(r'bc-stat-store">([^<]*)', cards)
+    assert stores == ["eMAG", "Notino"]
+    assert cards.count("cel mai ieftin la 1 din 2 produse") == 2
+    assert "bc-legend" in markdown(at)
     assert list(matrix["Produs"]) == ["Cicaplast Baume B5+", "Effaclar Duo+"]
-    assert list(matrix["eMAG"]) == [8.3, -3.5]
-    assert list(matrix["Notino"]) == [-8.3, 3.5]
+    assert list(matrix["eMAG"]) == ["+8,3%", "-3,5%"]
+    assert list(matrix["Notino"]) == ["-8,3%", "+3,5%"]
 
     assert at.selectbox(key="cmp_store").value == "eMAG"
     assert list(detail["Produs"]) == ["Cicaplast Baume B5+", "Effaclar Duo+"]
@@ -331,15 +334,31 @@ def test_competitor_view(ui_api: respx.MockRouter, shop: dict[str, int]) -> None
     assert "**eMAG**: 1 sub piață, 1 peste piață, din 2 listate." in markdown(at)
 
     at.selectbox(key="cmp_store").select("Notino").run()
-    assert list(at.dataframe[2].value["Poziție"]) == ["Sub piață", "Peste piață"]
+    assert list(at.dataframe[1].value["Poziție"]) == ["Sub piață", "Peste piață"]
 
 
 def test_competitor_view_out_of_stock_brand(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
     at = open_competitors()
     at.selectbox(key="cmp_brand").select("CeraVe").run()
-    detail = at.dataframe[2].value
+    detail = at.dataframe[1].value
     assert list(detail["Poziție"]) == ["Stoc epuizat"]
     assert list(detail["Median piață"]) == ["—"]
+
+
+def test_competitor_matrix_marks_unlisted_cells(
+    ui_api: respx.MockRouter, shop: dict[str, int], api_session: Session
+) -> None:
+    sephora = Retailer(slug="sephora", name="Sephora", domain="sephora.ro")
+    duo = api_session.get(Product, shop["duo"])
+    assert duo is not None
+    _observe(api_session, sephora, duo, "https://sephora.ro/duo", [(1, 9_000, True)])
+    api_session.commit()
+    at = open_competitors()
+    at.selectbox(key="cmp_brand").select("La Roche-Posay").run()
+    matrix = at.dataframe[0].value
+    assert list(matrix["Produs"]) == ["Cicaplast Baume B5+", "Effaclar Duo+"]
+    assert matrix["Sephora"][0] == "—"  # Sephora doesn't list Cicaplast
+    assert matrix["Sephora"][1].startswith("+")
 
 
 def test_competitor_view_without_brands(ui_api: respx.MockRouter) -> None:

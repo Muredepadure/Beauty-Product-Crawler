@@ -11,6 +11,7 @@ from beautycrawler.api.schemas import (
     ProductSummary,
 )
 from beautycrawler.ui_data import (
+    MARKET_LEGEND_HTML,
     active_filter_count,
     card_badges,
     card_html,
@@ -25,8 +26,10 @@ from beautycrawler.ui_data import (
     media_html,
     offer_table_html,
     page_count,
+    pct_cell_style,
     plural_ro,
-    position_rows,
+    position_cards_html,
+    position_style,
     price_html,
     product_header_html,
     products_label,
@@ -445,21 +448,42 @@ def _comparison() -> BrandComparison:
     )
 
 
-def test_position_rows() -> None:
-    assert position_rows(_comparison()) == [
-        {
-            "Magazin": "Emag",
-            "Produse listate": 1,
-            "Cel mai ieftin la": 1,
-            "Medie față de median": "-3,5%",
-        },
-        {
-            "Magazin": "Notino",
-            "Produse listate": 2,
-            "Cel mai ieftin la": 0,
-            "Medie față de median": "—",
-        },
-    ]
+def test_position_cards_html() -> None:
+    html = position_cards_html(_comparison())
+    assert "\n" not in html and html.startswith('<div class="bc-stats">')
+    emag, notino = html.split('<div class="bc-stat">')[1:]
+    assert '<div class="bc-stat-store">Emag</div>' in emag
+    assert '<span class="bc-pill bc-below">-3,5%</span>' in emag
+    assert "cel mai ieftin la 1 din 1 produs" in emag
+    assert '<span class="bc-pill">—</span>' in notino  # no in-stock price: neutral
+    assert "cel mai ieftin la 0 din 2 produse" in notino
+
+
+@pytest.mark.parametrize(
+    ("value", "style"),
+    [
+        (None, ""),
+        ("—", ""),
+        (float("nan"), ""),
+        (0.0, ""),
+        (2.0, ""),  # inside the ±2 % band
+        (-2.0, ""),
+        (-4.0, "background-color: rgba(46, 160, 67, 0.19)"),
+        (10.0, "background-color: rgba(218, 54, 51, 0.29)"),
+        (20.0, "background-color: rgba(218, 54, 51, 0.45)"),
+        (-80.0, "background-color: rgba(46, 160, 67, 0.45)"),  # capped
+    ],
+)
+def test_pct_cell_style(value: object, style: str) -> None:
+    assert pct_cell_style(value) == style
+
+
+def test_position_style_and_legend() -> None:
+    assert position_style("Sub piață") == "background-color: rgba(46, 160, 67, 0.20)"
+    assert position_style("Peste piață") == "background-color: rgba(218, 54, 51, 0.20)"
+    assert position_style("La nivelul pieței") == position_style("Stoc epuizat") == ""
+    assert "(±2%)" in MARKET_LEGEND_HTML
+    assert MARKET_LEGEND_HTML.count("bc-pill") == 3
 
 
 def test_retailer_rows_skip_unlisted_products() -> None:

@@ -17,7 +17,7 @@ import streamlit as st
 from beautycrawler.api.schemas import ProductDetail, ProductSummary
 from beautycrawler.ui_client import ApiClient, ApiError, NotFound
 from beautycrawler.ui_data import (
-    MARKET_BAND_PCT,
+    MARKET_LEGEND_HTML,
     SORT_LABELS,
     active_filter_count,
     card_html,
@@ -29,14 +29,14 @@ from beautycrawler.ui_data import (
     media_html,
     offer_table_html,
     page_count,
-    position_rows,
+    pct_cell_style,
+    position_cards_html,
+    position_style,
     product_header_html,
     products_label,
     retailer_rows,
 )
 from beautycrawler.ui_style import (
-    ABOVE_MARKET,
-    BELOW_MARKET,
     CSS,
     HEADER_KEY,
     PAGE_ICON,
@@ -295,22 +295,12 @@ def product_page(api: ApiClient, product_id: int) -> None:
 # ------------------------------------------------------------------------- competitors
 
 
-def _pct_color(value: object) -> str:
-    """Cell style for % vs median: green below the market, red above."""
-    if not isinstance(value, int | float):
-        return ""
-    if value < -MARKET_BAND_PCT:
-        return BELOW_MARKET
-    if value > MARKET_BAND_PCT:
-        return ABOVE_MARKET
-    return ""
-
-
 def competitors_page(api: ApiClient) -> None:
     st.title("🏷️ Comparație prețuri")
-    st.caption(
-        "Pentru vânzători: prețul fiecărui magazin față de piață (minimul și mediana "
-        "prețurilor în stoc, câte unul per magazin)."
+    st.markdown(
+        "Pentru vânzători: cum se poziționează fiecare magazin față de piață la produsele "
+        "unui brand. **Mediana** este prețul din mijloc dintre magazinele care au produsul "
+        "în stoc (câte un preț per magazin)."
     )
     brands = brand_names()
     if not brands:
@@ -327,24 +317,33 @@ def competitors_page(api: ApiClient) -> None:
         return
 
     st.subheader("Poziția magazinelor")
-    st.dataframe(pd.DataFrame(position_rows(comparison)), hide_index=True, width="stretch")
+    st.markdown(position_cards_html(comparison), unsafe_allow_html=True)
 
     st.subheader("Față de mediana pieței, pe produs")
-    matrix = pd.DataFrame(matrix_rows(comparison))
-    stores = [c for c in matrix.columns if c != "Produs"]
+    st.markdown(MARKET_LEGEND_HTML, unsafe_allow_html=True)
+    values = pd.DataFrame(matrix_rows(comparison))
+    stores = [c for c in values.columns if c != "Produs"]
+    # The grid shows a missing number as "None" whatever the formatter, so it gets the
+    # display strings; the colours still come from the numbers.
+    shown = values.copy()
+    shown[stores] = values[stores].map(lambda v: format_pct(v) if pd.notna(v) else "—")
     st.dataframe(
-        matrix.style.map(_pct_color, subset=stores).format(
-            lambda v: format_pct(v) if pd.notna(v) else "—",
-            subset=stores,
-        ),
+        shown.style.apply(lambda col: [pct_cell_style(v) for v in values[col.name]], subset=stores),
+        hide_index=True,
+        width="stretch",
+        column_config={s: st.column_config.TextColumn(s) for s in stores},
+    )
+    st.caption("— = magazinul nu listează produsul sau nu există încă un preț de piață.")
+
+    st.subheader("Detalii pe magazin")
+    slugs = {p.retailer.name: p.retailer.slug for p in comparison.retailers}
+    store = st.selectbox("Magazin", list(slugs), key="cmp_store")
+    rows = retailer_rows(comparison, slugs[store])
+    st.dataframe(
+        pd.DataFrame(rows).style.map(position_style, subset=["Poziție"]),
         hide_index=True,
         width="stretch",
     )
-
-    slugs = {p.retailer.name: p.retailer.slug for p in comparison.retailers}
-    store = st.selectbox("Detalii pentru magazinul", list(slugs), key="cmp_store")
-    rows = retailer_rows(comparison, slugs[store])
-    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
     under = sum(r["Poziție"] == "Sub piață" for r in rows)
     over = sum(r["Poziție"] == "Peste piață" for r in rows)
     st.markdown(f"**{store}**: {under} sub piață, {over} peste piață, din {len(rows)} listate.")

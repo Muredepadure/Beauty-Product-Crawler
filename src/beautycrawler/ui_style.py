@@ -16,9 +16,11 @@ ACCENT_DARK = "#F08BA6"
 
 # Table cell highlights. Translucent, so the same value reads well on the light and the
 # dark background.
-CHEAPEST_ROW = "background-color: rgba(46, 160, 67, 0.18)"
-BELOW_MARKET = "background-color: rgba(46, 160, 67, 0.20)"
-ABOVE_MARKET = "background-color: rgba(218, 54, 51, 0.20)"
+GREEN_RGB = "46, 160, 67"
+RED_RGB = "218, 54, 51"
+CHEAPEST_ROW = f"background-color: rgba({GREEN_RGB}, 0.18)"
+BELOW_MARKET = f"background-color: rgba({GREEN_RGB}, 0.20)"
+ABOVE_MARKET = f"background-color: rgba({RED_RGB}, 0.20)"
 
 # Streamlit's own classes are not a stable API, so only `data-testid` hooks and the
 # `st-key-<key>` class Streamlit adds to keyed containers are used.
@@ -188,6 +190,35 @@ a.bc-shop-btn {{
     padding: 0.4rem 0.95rem;
 }}
 a.bc-shop-btn:hover {{ filter: brightness(1.1); }}
+
+/* Seller view (markup: `ui_data.position_cards_html`, `ui_data.MARKET_LEGEND_HTML`). */
+.bc-legend {{ display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.25rem 0 0.5rem; }}
+.bc-pill {{
+    display: inline-block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border-radius: 999px;
+    padding: 0.1rem 0.6rem;
+    background: rgba(128, 128, 128, 0.15);
+    white-space: nowrap;
+}}
+.bc-pill.bc-below {{ {BELOW_MARKET}; }}
+.bc-pill.bc-above {{ {ABOVE_MARKET}; }}
+.bc-stats {{
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}}
+.bc-stat {{
+    border: 1px solid rgba(128, 128, 128, 0.25);
+    border-radius: 0.6rem;
+    padding: 0.75rem 1rem;
+}}
+.bc-stat-store {{ font-weight: 650; }}
+.bc-stat-value {{ margin: 0.35rem 0 0.2rem; }}
+.bc-stat-value .bc-pill {{ font-size: 1.05rem; padding: 0.15rem 0.7rem; }}
+.bc-stat-label, .bc-stat-foot {{ font-size: 0.8rem; opacity: 0.72; }}
 
 /* Sidebar filter group titles. */
 .bc-filter-group {{

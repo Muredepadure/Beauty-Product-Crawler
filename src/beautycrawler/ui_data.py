@@ -12,6 +12,7 @@ from beautycrawler.api.schemas import (
     ProductSummary,
 )
 from beautycrawler.ui_client import format_lei
+from beautycrawler.ui_style import ABOVE_MARKET, BELOW_MARKET, GREEN_RGB, RED_RGB
 
 SORT_LABELS: dict[str, str] = {
     "name": "Nume (A-Z)",
@@ -264,16 +265,52 @@ def market_position(pct_vs_median: float | None, in_stock: bool) -> str:
     return "La nivelul pieței"
 
 
-def position_rows(comparison: BrandComparison) -> list[dict[str, object]]:
-    return [
-        {
-            "Magazin": p.retailer.name,
-            "Produse listate": p.products_listed,
-            "Cel mai ieftin la": p.cheapest_count,
-            "Medie față de median": format_pct(p.avg_vs_median_pct),
-        }
-        for p in comparison.retailers
-    ]
+MARKET_CLASS = {"Sub piață": "bc-below", "Peste piață": "bc-above"}
+
+MARKET_LEGEND_HTML = (
+    '<div class="bc-legend">'
+    '<span class="bc-pill bc-below">Sub mediană: mai ieftin decât piața</span>'
+    f'<span class="bc-pill">La nivelul pieței (±{MARKET_BAND_PCT:.0f}%)</span>'
+    '<span class="bc-pill bc-above">Peste mediană: mai scump</span>'
+    "</div>"
+)
+
+
+def pct_cell_style(value: object) -> str:
+    """Heatmap cell for % vs median: green below, red above, stronger the further from
+    the median (full strength at ±20 %); no colour within the ±2 % band or when empty."""
+    if not isinstance(value, int | float) or value != value:  # NaN
+        return ""
+    if abs(value) <= MARKET_BAND_PCT:
+        return ""
+    alpha = 0.12 + 0.33 * min(abs(value), 20.0) / 20.0
+    rgb = GREEN_RGB if value < 0 else RED_RGB
+    return f"background-color: rgba({rgb}, {alpha:.2f})"
+
+
+def position_style(label: object) -> str:
+    """Cell style for the "Poziție" column of the store detail table."""
+    return {"Sub piață": BELOW_MARKET, "Peste piață": ABOVE_MARKET}.get(str(label), "")
+
+
+def position_cards_html(comparison: BrandComparison) -> str:
+    """One card per retailer: average % vs the median as a coloured pill, and on how many
+    of its listed products it is the cheapest."""
+    cards = []
+    for p in comparison.retailers:
+        label = market_position(p.avg_vs_median_pct, True)
+        css = MARKET_CLASS.get(label, "")
+        pill = f'<span class="bc-pill{" " + css if css else ""}">'
+        listed = plural_ro(p.products_listed, "produs", "produse")
+        cards.append(
+            '<div class="bc-stat">'
+            f'<div class="bc-stat-store">{escape(p.retailer.name)}</div>'
+            f'<div class="bc-stat-value">{pill}{format_pct(p.avg_vs_median_pct)}</span></div>'
+            '<div class="bc-stat-label">față de mediană, în medie</div>'
+            f'<div class="bc-stat-foot">cel mai ieftin la {p.cheapest_count} din {listed}</div>'
+            "</div>"
+        )
+    return f'<div class="bc-stats">{"".join(cards)}</div>'
 
 
 def retailer_rows(comparison: BrandComparison, retailer_slug: str) -> list[dict[str, object]]:
