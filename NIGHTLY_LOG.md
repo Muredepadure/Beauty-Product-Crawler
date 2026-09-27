@@ -12,6 +12,17 @@ Blockers / questions for owner: <or "none">
 
 ---
 
+## 2026-09-27 — claude/nightly-2026-09-26-P3.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/6
+Done: nothing. Every open roadmap task is P3.x, and P3.1 is still blocked. I added this entry
+to PR #6 instead of opening another empty PR.
+Tests: not re-run (no code changes; main is unchanged since the last green run).
+Next: P3.1 retailer audit, as soon as the retailer domains are reachable.
+Blockers / questions for owner:
+- Rechecked 2026-09-27: all 10 retailers' robots.txt fail at the environment proxy (CONNECT rejected).
+  Allow the retailer domains in the cloud environment's Network access settings, or commit
+  fixtures under tests/fixtures/<retailer>/.
+- Still open: add a `pack_count` column for multipacks? Is the /api/products page/page_size switch OK?
+
 ## 2026-09-26 (second run) — claude/nightly-2026-09-26-P3.1 — PR (see branch)
 Done: no roadmap task. Every task not marked [!] is ticked, and all remaining tasks
 (P3.1–P3.11) are still blocked.
