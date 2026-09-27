@@ -153,6 +153,22 @@ def test_search_query_filters_cards(ui_api: respx.MockRouter, shop: dict[str, in
     assert [b.key for b in at.button if b.label == "Resetează filtrele"] == ["reset_filters"]
 
 
+def test_search_hides_demo_products_once_offers_exist(
+    ui_api: respx.MockRouter, shop: dict[str, int], api_session: Session
+) -> None:
+    api_session.add(Product(name="Demo fără oferte", normalized_name="demo fara oferte"))
+    api_session.commit()
+    assert "Demo fără oferte" not in card_names(run_app())
+
+
+def test_search_shows_demo_products_before_the_first_crawl(
+    ui_api: respx.MockRouter, api_session: Session
+) -> None:
+    api_session.add(Product(name="Demo fără oferte", normalized_name="demo fara oferte"))
+    api_session.commit()
+    assert card_names(run_app()) == ["Demo fără oferte"]
+
+
 def test_search_empty_database(ui_api: respx.MockRouter) -> None:
     at = run_app()
     assert not at.exception

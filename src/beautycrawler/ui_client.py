@@ -98,6 +98,7 @@ class ApiClient:
         min_price_bani: int | None = None,
         max_price_bani: int | None = None,
         in_stock: bool = False,
+        unlisted: str = "show",
     ) -> ProductPage:
         params = {
             "q": q,
@@ -109,6 +110,7 @@ class ApiClient:
             "min_price": min_price_bani,
             "max_price": max_price_bani,
             "in_stock": "true" if in_stock else None,
+            "unlisted": None if unlisted == "show" else unlisted,
         }
         return self._model(ProductPage, "/products", params)
 

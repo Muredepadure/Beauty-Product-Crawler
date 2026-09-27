@@ -45,6 +45,14 @@ class ProductSort(enum.StrEnum):
     RETAILERS = "retailers"  # most retailers first
 
 
+class Unlisted(enum.StrEnum):
+    """Products without any listing (e.g. the seed's demo products)."""
+
+    SHOW = "show"
+    HIDE = "hide"
+    AUTO = "auto"  # hide them once any product has a listing
+
+
 def search_words(q: str) -> list[str]:
     """Query words, folded; punctuation dropped ("L'Oréal Duo+" -> loreal, duo)."""
     return list(dict.fromkeys(_WORD.findall(fold(q).replace("'", ""))))
@@ -104,6 +112,13 @@ def list_products(
     in_stock: Annotated[
         bool, Query(description="Only products at least one retailer has in stock")
     ] = False,
+    unlisted: Annotated[
+        Unlisted,
+        Query(
+            description="Products without listings: show, hide, or auto (hide them as soon "
+            "as any product has a listing, so demo data disappears after the first crawl)"
+        ),
+    ] = Unlisted.SHOW,
     sort: ProductSort = ProductSort.NAME,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 24,
@@ -127,6 +142,11 @@ def list_products(
         conditions.append(stats.c.lowest_price <= max_price)
     if in_stock:
         conditions.append(stats.c.lowest_price.is_not(None))
+    if unlisted is Unlisted.HIDE or (
+        unlisted is Unlisted.AUTO
+        and session.scalar(select(Offer.id).where(Offer.product_id.is_not(None)).limit(1))
+    ):
+        conditions.append(stats.c.offer_count.is_not(None))
 
     base = (
         select(Product, Brand.name.label("brand_name"), stats)

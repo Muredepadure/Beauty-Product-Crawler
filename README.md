@@ -63,6 +63,10 @@ alembic upgrade head               # create the schema (default: SQLite file bea
 python scripts/seed.py             # tracked retailers + a few demo products (idempotent)
 ```
 
+The demo products have no offers. They show in the UI's search only until the first crawl:
+as soon as any product has a listing, search hides products without one (API parameter
+`unlisted=auto`). Use `python scripts/seed.py --no-demo` to skip them altogether.
+
 After changing models in `src/beautycrawler/db/models.py`, generate a migration with
 `alembic revision --autogenerate -m "<what changed>"` and review it (autogenerate misses
 check constraints); a test fails if models and migrations drift apart.
@@ -134,7 +138,7 @@ All prices are integer **bani** (1 RON = 100 bani); times are UTC.
 | Endpoint | Returns |
 |---|---|
 | `GET /healthz` | `{"status": "ok"}` |
-| `GET /api/products` | Product search. `q` (every word must match name or brand; case/diacritics ignored), `brand` (any alias), `category`, `min_price`/`max_price` (bani, on the lowest in-stock price), `in_stock=true`, `sort` = `name` \| `price_asc` \| `price_desc` \| `retailers`, `page`, `page_size` (1–100) |
+| `GET /api/products` | Product search. `q` (every word must match name or brand; case/diacritics ignored), `brand` (any alias), `category`, `min_price`/`max_price` (bani, on the lowest in-stock price), `in_stock=true`, `unlisted` = `show` (default) \| `hide` \| `auto` (hide products without listings once any product has one), `sort` = `name` \| `price_asc` \| `price_desc` \| `retailers`, `page`, `page_size` (1–100) |
 | `GET /api/products/{id}` | The product with every retailer's offer: in stock by price first, `is_cheapest` on the lowest in-stock price |
 | `GET /api/products/{id}/history` | Price history per offer (`days` window). Points exist only on change: draw steps |
 | `GET /api/retailers` | Tracked retailers with offer/product counts (`active` filter) |

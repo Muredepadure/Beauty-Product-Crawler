@@ -311,6 +311,28 @@ def test_product_detail_nothing_in_stock(client: TestClient, catalogue: dict[str
     assert [o["is_cheapest"] for o in body["offers"]] == [False]
 
 
+@pytest.mark.parametrize(
+    ("unlisted", "has_nobrand"), [(None, True), ("show", True), ("hide", False), ("auto", False)]
+)
+def test_unlisted_products(
+    client: TestClient, catalogue: dict[str, int], unlisted: str | None, has_nobrand: bool
+) -> None:
+    params = {"unlisted": unlisted} if unlisted else {}
+    body = client.get("/api/products", params=params).json()
+    assert (catalogue["nobrand"] in ids(body)) is has_nobrand
+    assert body["total"] == (5 if has_nobrand else 4)
+
+
+def test_unlisted_auto_keeps_a_demo_only_catalogue(
+    client: TestClient, api_session: Session
+) -> None:
+    """Before the first crawl (no listings at all) "auto" still shows the demo products."""
+    api_session.add(Product(name="Demo", normalized_name="demo"))
+    api_session.commit()
+    assert client.get("/api/products", params={"unlisted": "auto"}).json()["total"] == 1
+    assert client.get("/api/products", params={"unlisted": "hide"}).json()["total"] == 0
+
+
 def test_on_sale_means_the_lowest_in_stock_price_is_discounted(
     client: TestClient, catalogue: dict[str, int]
 ) -> None:

@@ -231,8 +231,9 @@ def search_page(api: ApiClient) -> None:
     page = int(st.session_state.get("page", 1))
     try:
         with st.spinner("Se încarcă produsele…"):
+            # "auto": the seed's demo products vanish once real offers exist (P10.7).
             results = api.search_products(
-                q or None, sort=sort, page=page, page_size=PAGE_SIZE, **filters
+                q or None, sort=sort, page=page, page_size=PAGE_SIZE, unlisted="auto", **filters
             )
     except ApiError as exc:
         show_api_error(exc, "produsele")
