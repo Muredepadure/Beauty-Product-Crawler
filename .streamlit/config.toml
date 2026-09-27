@@ -18,6 +18,7 @@ secondaryBackgroundColor = "#F7F4F5"
 textColor = "#1F1B1D"
 borderColor = "#E6E0E2"
 linkColor = "#B4325A"
+chartCategoricalColors = ["#B4325A", "#2F6F8F", "#C98A2B", "#4F8A5B", "#7B5EA7", "#C0564B", "#5C6B7A"]
 
 [theme.dark]
 primaryColor = "#F08BA6"
@@ -26,6 +27,7 @@ secondaryBackgroundColor = "#211D20"
 textColor = "#EEE9EB"
 borderColor = "#3A3438"
 linkColor = "#F08BA6"
+chartCategoricalColors = ["#F08BA6", "#7FB8D6", "#E9B461", "#8CC79A", "#B79CE0", "#E8897F", "#A3B1BF"]
 
 [client]
 # Hide the developer menu entries (Rerun, Settings stay) for visitors.

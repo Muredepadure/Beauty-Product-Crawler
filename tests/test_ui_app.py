@@ -214,17 +214,29 @@ def _chart_specs(at: AppTest) -> list[str]:
     return [e.proto.spec for e in at.main if getattr(e, "type", "") == "vega_lite_chart"]
 
 
+def offer_table(at: AppTest) -> str:
+    [table] = [m.value for m in at.markdown if m.value.startswith('<div class="bc-offers">')]
+    return table
+
+
 def test_product_page_price_table(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
     at = run_app({"product": str(shop["duo"])})
     assert not at.exception
     assert at.title[0].value == "Effaclar Duo+"
-    assert "de la 74,50 lei · 2 magazine" in markdown(at)
-    table = at.dataframe[0].value
-    assert list(table["Magazin"]) == ["eMAG", "Notino"]  # cheapest first
-    assert list(table[""]) == ["🏆", ""]
-    assert list(table["Preț"]) == ["74,50 lei", "79,90 lei"]
-    assert list(table["Stoc"]) == ["În stoc", "În stoc"]
-    assert list(table["Link"]) == ["https://emag.ro/duo", "https://notino.ro/duo"]
+    header = markdown(at)
+    assert '<div class="bc-card-brand bc-detail-brand">La Roche-Posay</div>' in header
+    assert '<div class="bc-detail-meta">40 ml</div>' in header
+    assert '<span class="bc-from">de la</span> 74,50 lei' in header
+    assert '<div class="bc-card-stores">la 2 magazine</div>' in header
+    table = offer_table(at)
+    rows = re.findall(r"<tr[ >].*?</tr>", table.split("<tbody>")[1])
+    assert [re.findall(r'bc-col-store">([^<]*)', r) for r in rows] == [["eMAG"], ["Notino"]]
+    assert rows[0].startswith('<tr class="bc-cheapest">')  # emag's 74,50 beats 79,90
+    assert "Cel mai mic preț" in rows[0] and "Cel mai mic preț" not in rows[1]
+    assert "74,50 lei" in rows[0] and "79,90 lei" in rows[1]
+    assert all("În stoc" in r for r in rows)
+    assert 'href="https://emag.ro/duo"' in rows[0] and 'href="https://notino.ro/duo"' in rows[1]
+    assert table.count("Vezi în magazin") == 2
 
 
 def test_product_page_history_chart(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
@@ -239,9 +251,10 @@ def test_product_page_history_chart(ui_api: respx.MockRouter, shop: dict[str, in
 
 def test_product_page_out_of_stock_only(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
     at = run_app({"product": str(shop["cleanser"])})
-    assert "Stoc epuizat · 1 magazin" in markdown(at)
-    table = at.dataframe[0].value
-    assert (list(table["Stoc"]), list(table[""])) == (["Stoc epuizat"], [""])
+    assert '<div class="bc-card-price bc-muted">Indisponibil</div>' in markdown(at)
+    assert "Stoc epuizat" in markdown(at)  # the badge on the image
+    table = offer_table(at)
+    assert "bc-out-of-stock" in table and "bc-cheapest" not in table
 
 
 def test_product_page_without_offers(ui_api: respx.MockRouter, api_session: Session) -> None:

@@ -120,6 +120,75 @@ CSS = f"""
 .bc-card-price.bc-muted {{ font-size: 1rem; font-weight: 600; opacity: 0.72; }}
 .bc-card-stores {{ margin-bottom: 0.25rem; }}
 
+/* Product page header (markup: `ui_data.product_header_html`). */
+.bc-detail-brand {{ font-size: 0.95rem; }}
+.bc-detail-meta {{ opacity: 0.72; margin-top: -0.5rem; }}
+
+/* Product page price table (markup: `ui_data.offer_table_html`). */
+.bc-offers {{ overflow-x: auto; }}
+/* The data-testid prefix outranks Streamlit's own markdown table borders. */
+[data-testid="stMarkdownContainer"] .bc-offers table {{
+    width: 100%;
+    border-collapse: collapse;
+    border: none;
+}}
+[data-testid="stMarkdownContainer"] .bc-offers th,
+[data-testid="stMarkdownContainer"] .bc-offers td {{
+    border: none;
+    border-bottom: 1px solid rgba(128, 128, 128, 0.18);
+    padding: 0.7rem 0.75rem;
+    vertical-align: middle;
+}}
+[data-testid="stMarkdownContainer"] .bc-offers th {{
+    text-align: left;
+    font-size: 0.8rem;
+    font-weight: 600;
+    opacity: 0.72;
+    padding: 0.4rem 0.75rem;
+    border-bottom-color: rgba(128, 128, 128, 0.3);
+}}
+.bc-offers tr.bc-cheapest td {{ {CHEAPEST_ROW}; }}
+.bc-col-store {{ font-weight: 600; }}
+.bc-seller {{ font-size: 0.8rem; font-weight: 400; opacity: 0.72; }}
+.bc-best {{
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #FFFFFF;
+    background: #2A7F40;
+    border-radius: 999px;
+    padding: 0.05rem 0.5rem;
+    margin-left: 0.4rem;
+}}
+.bc-offer-price {{ font-size: 1.1rem; font-weight: 700; white-space: nowrap; }}
+.bc-old-price {{ opacity: 0.6; white-space: nowrap; margin-left: 0.35rem; }}
+.bc-discount {{
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #FFFFFF;
+    background: {ACCENT_LIGHT};
+    border-radius: 999px;
+    padding: 0.05rem 0.45rem;
+    margin-left: 0.25rem;
+}}
+.bc-stock {{ white-space: nowrap; }}
+.bc-stock::before {{ content: "● "; }}
+.bc-in-stock::before {{ color: #2E8B45; }}
+.bc-out-of-stock {{ opacity: 0.6; }}
+.bc-col-link {{ text-align: right; }}
+a.bc-shop-btn {{
+    display: inline-block;
+    white-space: nowrap;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-decoration: none;
+    color: #FFFFFF !important;
+    background: {ACCENT_LIGHT};
+    border-radius: 999px;
+    padding: 0.4rem 0.95rem;
+}}
+a.bc-shop-btn:hover {{ filter: brightness(1.1); }}
+
 /* Sidebar filter group titles. */
 .bc-filter-group {{
     font-size: 0.75rem;
@@ -144,6 +213,16 @@ CSS = f"""
     }}
     h1 {{ font-size: 1.6rem !important; }}
     .bc-card-media {{ aspect-ratio: 4 / 3; }}  /* one card per row: keep it short */
+    /* Price table: one block per store instead of a wide table. */
+    .bc-offers thead {{ display: none; }}
+    .bc-offers table, .bc-offers tbody, .bc-offers tr, .bc-offers td {{ display: block; }}
+    .bc-offers tr {{ border-bottom: 1px solid rgba(128, 128, 128, 0.18); padding: 0.5rem 0; }}
+    [data-testid="stMarkdownContainer"] .bc-offers td {{
+        border: none;
+        padding: 0.15rem 0.75rem;
+        text-align: left;
+    }}
+    .bc-col-link {{ padding-top: 0.5rem !important; }}
 }}
 </style>
 """

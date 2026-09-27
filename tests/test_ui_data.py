@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -13,8 +14,6 @@ from beautycrawler.ui_data import (
     active_filter_count,
     card_badges,
     card_html,
-    card_price_line,
-    card_subtitle,
     discount_pct,
     empty_hint,
     format_pct,
@@ -23,14 +22,18 @@ from beautycrawler.ui_data import (
     lei_to_bani,
     market_position,
     matrix_rows,
-    offer_rows,
+    media_html,
+    offer_table_html,
     page_count,
     plural_ro,
     position_rows,
+    price_html,
+    product_header_html,
     products_label,
     retailer_rows,
     safe_image_url,
     stores_label,
+    stores_line,
 )
 
 
@@ -92,16 +95,12 @@ def _summary(**kw: object) -> ProductSummary:
     return ProductSummary.model_validate(base | kw)
 
 
-def test_card_lines() -> None:
-    assert card_price_line(_summary()) == "de la 74,50 lei · 2 magazine"
-    assert card_price_line(_summary(lowest_price_bani=None, in_stock=False)) == (
-        "Stoc epuizat · 2 magazine"
+def test_price_html_and_stores_line() -> None:
+    assert price_html(_summary()) == (
+        '<div class="bc-card-price"><span class="bc-from">de la</span> 74,50 lei</div>'
     )
-    assert card_price_line(_summary(lowest_price_bani=None, offer_count=0, retailer_count=0)) == (
-        "Fără oferte încă"
-    )
-    assert card_subtitle(_summary()) == "La Roche-Posay · 40 ml"
-    assert card_subtitle(_summary(brand=None, size_value=None)) == ""
+    assert stores_line(_summary()) == "la 2 magazine"
+    assert stores_line(_summary(retailer_count=0, offer_count=0)) == ""
 
 
 # --- P10.3: search filters and empty state --------------------------------------------
@@ -220,38 +219,97 @@ def test_discount_pct() -> None:
 NOW = datetime(2026, 9, 26, 12, 0, tzinfo=UTC)
 
 
-def test_offer_rows() -> None:
-    detail = ProductDetail.model_validate(
-        _summary().model_dump()
-        | {
-            "offers": [
-                {
-                    "id": 1,
-                    "retailer": {"slug": "emag", "name": "eMAG"},
-                    "url": "https://emag.ro/duo",
-                    "title": "Duo",
-                    "seller_name": "Beauty SRL",
-                    "price_bani": 7_450,
-                    "old_price_bani": 8_990,
-                    "currency": "RON",
-                    "in_stock": True,
-                    "last_seen_at": NOW,
-                    "is_cheapest": True,
-                }
-            ]
-        }
+def _offer(**kw: object) -> dict[str, object]:
+    base: dict[str, object] = {
+        "id": 1,
+        "retailer": {"slug": "emag", "name": "eMAG"},
+        "url": "https://emag.ro/duo",
+        "title": "Duo",
+        "seller_name": None,
+        "price_bani": 7_450,
+        "old_price_bani": None,
+        "currency": "RON",
+        "in_stock": True,
+        "last_seen_at": NOW,
+        "is_cheapest": False,
+    }
+    return base | kw
+
+
+def _detail(*offers: dict[str, object], **kw: object) -> ProductDetail:
+    return ProductDetail.model_validate(_summary(**kw).model_dump() | {"offers": list(offers)})
+
+
+def test_offer_table_html() -> None:
+    html = offer_table_html(
+        _detail(
+            _offer(seller_name="Beauty SRL", old_price_bani=8_990, is_cheapest=True),
+            _offer(
+                id=2,
+                retailer={"slug": "notino", "name": "Notino"},
+                url="https://notino.ro/duo",
+                price_bani=7_990,
+                in_stock=False,
+            ),
+        )
     )
-    assert offer_rows(detail) == [
-        {
-            "": "🏆",
-            "Magazin": "eMAG (vândut de Beauty SRL)",
-            "Preț": "74,50 lei",
-            "Preț vechi": "89,90 lei",
-            "Reducere": "-17%",
-            "Stoc": "În stoc",
-            "Link": "https://emag.ro/duo",
-        }
-    ]
+    assert "\n" not in html
+    cheapest, other = re.findall(r"<tr[ >].*?</tr>", html.split("<tbody>")[1])
+    assert cheapest.startswith('<tr class="bc-cheapest">')
+    assert '<div class="bc-seller">vândut de Beauty SRL</div>' in cheapest
+    assert '<div class="bc-best">Cel mai mic preț</div>' in cheapest
+    assert '<span class="bc-offer-price">74,50 lei</span>' in cheapest
+    assert '<s class="bc-old-price">89,90 lei</s> <span class="bc-discount">-17%</span>' in cheapest
+    assert '<span class="bc-stock bc-in-stock">În stoc</span>' in cheapest
+    assert (
+        '<a class="bc-shop-btn" href="https://emag.ro/duo" target="_blank" '
+        'rel="noopener noreferrer nofollow">Vezi în magazin</a>'
+    ) in cheapest
+    assert other.startswith("<tr>")
+    assert "bc-best" not in other and "bc-old-price" not in other
+    assert '<span class="bc-stock bc-out-of-stock">Stoc epuizat</span>' in other
+    assert 'href="https://notino.ro/duo"' in other
+
+
+def test_offer_table_html_old_price_without_discount_is_hidden() -> None:
+    html = offer_table_html(_detail(_offer(old_price_bani=7_450)))  # "old" = current
+    assert "bc-old-price" not in html and "bc-discount" not in html
+
+
+def test_offer_table_html_escapes_and_drops_unsafe_links() -> None:
+    html = offer_table_html(
+        _detail(
+            _offer(
+                retailer={"slug": "x", "name": "<b>Shop</b>"},
+                seller_name="A & B",
+                url="javascript:alert(1)",
+            )
+        )
+    )
+    assert "&lt;b&gt;Shop&lt;/b&gt;" in html and "A &amp; B" in html
+    assert "javascript:" not in html and "bc-shop-btn" not in html
+
+
+def test_product_header_html() -> None:
+    above, below = product_header_html(_detail())
+    assert above == '<div class="bc-card-brand bc-detail-brand">La Roche-Posay</div>'
+    assert '<div class="bc-detail-meta">40 ml</div>' in below
+    assert '<span class="bc-from">de la</span> 74,50 lei' in below
+    assert '<div class="bc-card-stores">la 2 magazine</div>' in below
+    above, below = product_header_html(
+        _detail(brand=None, size_value=None, lowest_price_bani=None, offer_count=0)
+    )
+    assert "&nbsp;" in above
+    assert '<div class="bc-detail-meta">&nbsp;</div>' in below
+    assert "Fără oferte încă" in below
+
+
+def test_media_html() -> None:
+    assert media_html(_summary(on_sale=True)) == (
+        '<div class="bc-card-media"><span class="bc-card-placeholder" aria-hidden="true">'
+        '💄</span><div class="bc-card-badges"><span class="bc-badge bc-badge-sale">'
+        "Reducere</span></div></div>"
+    )
 
 
 def test_history_rows_extend_to_last_seen_and_gap_when_out_of_stock() -> None:

@@ -21,23 +21,22 @@ from beautycrawler.ui_data import (
     SORT_LABELS,
     active_filter_count,
     card_html,
-    card_price_line,
-    card_subtitle,
     empty_hint,
     format_pct,
     history_rows,
     lei_to_bani,
     matrix_rows,
-    offer_rows,
+    media_html,
+    offer_table_html,
     page_count,
     position_rows,
+    product_header_html,
     products_label,
     retailer_rows,
 )
 from beautycrawler.ui_style import (
     ABOVE_MARKET,
     BELOW_MARKET,
-    CHEAPEST_ROW,
     CSS,
     HEADER_KEY,
     PAGE_ICON,
@@ -237,26 +236,10 @@ HISTORY_PERIODS: dict[str, int | None] = {
 
 
 def price_table(product: ProductDetail) -> None:
-    rows = offer_rows(product)
-    if not rows:
+    if not product.offers:
         st.info("Niciun magazin nu are încă oferte pentru acest produs.")
         return
-    frame = pd.DataFrame(rows)
-    cheapest = [bool(r[""]) for r in rows]
-
-    def highlight(row: pd.Series) -> list[str]:
-        style = CHEAPEST_ROW if cheapest[row.name] else ""
-        return [style] * len(row)
-
-    st.dataframe(
-        frame.style.apply(highlight, axis=1),
-        hide_index=True,
-        width="stretch",
-        column_config={
-            "": st.column_config.TextColumn("", width="small"),
-            "Link": st.column_config.LinkColumn("Link", display_text="Deschide ↗"),
-        },
-    )
+    st.markdown(offer_table_html(product), unsafe_allow_html=True)
 
 
 def history_chart(api: ApiClient, product_id: int) -> None:
@@ -271,13 +254,14 @@ def history_chart(api: ApiClient, product_id: int) -> None:
     if not rows:
         st.info("Nu există încă istoric de prețuri.")
         return
+    # Colours come from the theme (chartCategoricalColors in .streamlit/config.toml).
     chart = (
-        alt.Chart(pd.DataFrame(rows))
-        .mark_line(interpolate="step-after", point=True)
+        alt.Chart(pd.DataFrame(rows), height=320)
+        .mark_line(interpolate="step-after", strokeWidth=2.5, point=alt.OverlayMarkDef(size=36))
         .encode(
-            x=alt.X("Data:T", title=None),
-            y=alt.Y("Preț (lei):Q", scale=alt.Scale(zero=False)),
-            color=alt.Color("Magazin:N", title="Magazin"),
+            x=alt.X("Data:T", title=None, axis=alt.Axis(format="%d.%m", tickCount=8, grid=False)),
+            y=alt.Y("Preț (lei):Q", title="lei", scale=alt.Scale(zero=False)),
+            color=alt.Color("Magazin:N", title=None, legend=alt.Legend(orient="bottom")),
             tooltip=["Magazin", alt.Tooltip("Data:T", format="%d.%m.%Y %H:%M"), "Preț (lei)"],
         )
     )
@@ -286,7 +270,7 @@ def history_chart(api: ApiClient, product_id: int) -> None:
 
 
 def product_page(api: ApiClient, product_id: int) -> None:
-    st.button("← Înapoi la căutare", on_click=close_product)
+    st.button("← Înapoi la rezultate", on_click=close_product, type="tertiary")
     try:
         product = api.get_product(product_id)
     except NotFound:
@@ -295,16 +279,15 @@ def product_page(api: ApiClient, product_id: int) -> None:
     except ApiError as exc:
         st.error(f"Nu am putut încărca produsul: {exc}")
         return
-    left, right = st.columns([1, 3])
+    left, right = st.columns([1, 2], gap="large")
     with left:
-        if product.image_url:
-            st.image(product.image_url, width="stretch")
+        st.markdown(media_html(product), unsafe_allow_html=True)
     with right:
+        above, below = product_header_html(product)
+        st.markdown(above, unsafe_allow_html=True)
         st.title(product.name)
-        subtitle = card_subtitle(product)
-        if subtitle:
-            st.caption(subtitle)
-        st.markdown(card_price_line(product))
+        st.markdown(below, unsafe_allow_html=True)
+    st.subheader("Prețuri în magazine")
     price_table(product)
     history_chart(api, product_id)
 
