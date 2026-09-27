@@ -1,5 +1,6 @@
 """P5.4: `GET /api/retailers` and `GET /api/brands`."""
 
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -33,6 +34,7 @@ def data(api_session: Session) -> None:
                 title="x",
                 price_bani=1_000,
                 in_stock=True,
+                last_seen_at=datetime(2026, 9, 20 + n, 8, 30, tzinfo=UTC),
             )
         )
 
@@ -54,6 +56,7 @@ def test_retailers(client: TestClient, data: None) -> None:
             "is_active": False,
             "offer_count": 0,
             "product_count": 0,
+            "last_seen_at": None,
         },
         {
             "slug": "emag",
@@ -62,6 +65,7 @@ def test_retailers(client: TestClient, data: None) -> None:
             "is_active": True,
             "offer_count": 2,
             "product_count": 1,
+            "last_seen_at": "2026-09-25T08:30:00Z",  # the newer of its two listings
         },
         {
             "slug": "notino",
@@ -70,6 +74,7 @@ def test_retailers(client: TestClient, data: None) -> None:
             "is_active": True,
             "offer_count": 3,
             "product_count": 2,
+            "last_seen_at": "2026-09-23T08:30:00Z",
         },
     ]
 

@@ -101,6 +101,9 @@ class RetailerOut(BaseModel):
     is_active: bool
     offer_count: int = Field(description="Listings stored for this retailer")
     product_count: int = Field(description="Distinct matched products with a listing")
+    last_seen_at: UtcDatetime | None = Field(
+        None, description="Newest crawl of any of its listings (null: never crawled)"
+    )
 
 
 class BrandOut(BaseModel):

@@ -9,16 +9,21 @@ from beautycrawler.api.schemas import (
     ProductDetail,
     ProductHistory,
     ProductSummary,
+    RetailerOut,
 )
+from beautycrawler.ui_client import ApiError
 from beautycrawler.ui_data import (
     MARKET_LEGEND_HTML,
+    START_API_COMMAND,
     active_filter_count,
+    api_error_message,
     card_badges,
     card_html,
     discount_pct,
     empty_hint,
     format_pct,
     format_size,
+    freshness_text,
     history_rows,
     lei_to_bani,
     market_position,
@@ -353,10 +358,58 @@ def test_history_rows_extend_to_last_seen_and_gap_when_out_of_stock() -> None:
         }
     )
     assert history_rows(history) == [
-        {"Magazin": "Notino", "Data": NOW - timedelta(days=9), "Preț (lei)": 89.9},
-        {"Magazin": "Notino", "Data": NOW - timedelta(days=3), "Preț (lei)": None},
-        {"Magazin": "Notino", "Data": NOW, "Preț (lei)": None},
+        {
+            "Magazin": "Notino",
+            "Data": NOW - timedelta(days=9),
+            "Preț (lei)": 89.9,
+            "Preț": "89,90 lei",
+        },
+        {
+            "Magazin": "Notino",
+            "Data": NOW - timedelta(days=3),
+            "Preț (lei)": None,
+            "Preț": "Stoc epuizat",
+        },
+        {"Magazin": "Notino", "Data": NOW, "Preț (lei)": None, "Preț": "Stoc epuizat"},
     ]
+
+
+# --- P10.6 polish ----------------------------------------------------------------------
+
+
+def test_api_error_message() -> None:
+    down = api_error_message(ApiError("API unreachable: refused"), "produsele", "http://x/api")
+    assert down.startswith("Nu mă pot conecta la API (http://x/api)")
+    assert "nu am putut încărca produsele" in down
+    assert f"```\n{START_API_COMMAND}\n```" in down
+    assert START_API_COMMAND == "python -m uvicorn beautycrawler.api.main:app --port 8000"
+    failed = api_error_message(ApiError("API error 500: boom", 500), "produsul", "http://x/api")
+    assert failed == "Nu am putut încărca produsul: API error 500: boom"
+
+
+def _retailer(last_seen_at: datetime | None) -> RetailerOut:
+    return RetailerOut(
+        slug="s",
+        name="S",
+        domain="s.ro",
+        is_active=True,
+        offer_count=1,
+        product_count=1,
+        last_seen_at=last_seen_at,
+    )
+
+
+def test_freshness_text() -> None:
+    newest = datetime(2026, 9, 25, 8, 30, tzinfo=UTC)
+    retailers = [_retailer(None), _retailer(newest), _retailer(newest - timedelta(days=2))]
+    # Romania is UTC+3 in September (EEST)
+    assert freshness_text(retailers) == "Actualizat la 25.09.2026, 11:30"
+    assert freshness_text(retailers, UTC) == "Actualizat la 25.09.2026, 08:30 UTC"
+    assert freshness_text([_retailer(datetime(2026, 1, 5, 23, 10, tzinfo=UTC))]) == (
+        "Actualizat la 06.01.2026, 01:10"  # UTC+2 in winter, and past midnight
+    )
+    assert freshness_text([]) == freshness_text([_retailer(None)])
+    assert freshness_text([]) == "Încă nu există prețuri de la magazine."
 
 
 @pytest.mark.parametrize(

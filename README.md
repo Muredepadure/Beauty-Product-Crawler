@@ -160,6 +160,9 @@ the one custom CSS block live in `src/beautycrawler/ui_style.py`.
   under the market.
 
 The UI talks to the API only through `beautycrawler.ui_client` (`BEAUTYCRAWLER_API_BASE_URL`).
+When the API is not running, every page says so and shows the command to start it. The
+footer shows when the data was last refreshed (newest `last_seen_at` of any listing, from
+`GET /api/retailers`, in Romanian time).
 
 ---
 

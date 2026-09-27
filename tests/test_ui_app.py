@@ -184,7 +184,25 @@ def test_search_shows_api_errors(ui_api: respx.MockRouter) -> None:
     ui_api.route(host=API_HOST).mock(side_effect=httpx.ConnectError("refused"))
     at = run_app()
     assert not at.exception
-    assert "Nu am putut încărca produsele" in at.error[0].value
+    message = at.error[0].value
+    assert message.startswith(f"Nu mă pot conecta la API (http://{API_HOST}/api)")
+    assert "python -m uvicorn beautycrawler.api.main:app --port 8000" in message
+    assert "bc-footer" not in markdown(at)  # no freshness without the API
+
+
+def test_api_error_other_than_unreachable(ui_api: respx.MockRouter) -> None:
+    ui_api.routes.clear()
+    ui_api.route(host=API_HOST).mock(return_value=httpx.Response(500, text="boom"))
+    at = run_app()
+    assert at.error[0].value == "Nu am putut încărca produsele: API error 500: boom"
+
+
+def test_footer_shows_data_freshness(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    for at in (run_app(), run_app({"product": str(shop["duo"])})):
+        [footer] = [m.value for m in at.markdown if 'class="bc-footer"' in m.value]
+        assert re.fullmatch(
+            r'<div class="bc-footer">Actualizat la \d\d\.\d\d\.\d{4}, \d\d:\d\d</div>', footer
+        )
 
 
 def test_card_button_opens_product_page(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:

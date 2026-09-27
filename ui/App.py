@@ -8,6 +8,7 @@ product links can be shared.
 """
 
 from html import escape
+from pathlib import Path
 from typing import Any
 
 import altair as alt
@@ -15,14 +16,17 @@ import pandas as pd
 import streamlit as st
 
 from beautycrawler.api.schemas import ProductDetail, ProductSummary
+from beautycrawler.config import get_settings
 from beautycrawler.ui_client import ApiClient, ApiError, NotFound
 from beautycrawler.ui_data import (
     MARKET_LEGEND_HTML,
     SORT_LABELS,
     active_filter_count,
+    api_error_message,
     card_html,
     empty_hint,
     format_pct,
+    freshness_text,
     history_rows,
     lei_to_bani,
     matrix_rows,
@@ -47,7 +51,13 @@ from beautycrawler.ui_style import (
 
 PAGE_SIZE = 24
 
-st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="wide")
+FAVICON = Path(__file__).with_name("favicon.png")
+
+st.set_page_config(
+    page_title=PAGE_TITLE,
+    page_icon=str(FAVICON) if FAVICON.exists() else PAGE_ICON,
+    layout="wide",
+)
 
 
 @st.cache_resource
@@ -65,6 +75,24 @@ def close_product() -> None:
 
 def reset_page() -> None:
     st.session_state["page"] = 1
+
+
+def show_api_error(exc: ApiError, what: str) -> None:
+    st.error(api_error_message(exc, what, get_settings().api_base_url))
+
+
+@st.cache_data(ttl=300)
+def freshness() -> str | None:
+    try:
+        return freshness_text(get_client().list_retailers())
+    except ApiError:
+        return None  # the page itself already says the API is down
+
+
+def footer() -> None:
+    text = freshness()
+    if text:
+        st.markdown(f'<div class="bc-footer">{escape(text)}</div>', unsafe_allow_html=True)
 
 
 def header() -> None:
@@ -202,11 +230,12 @@ def search_page(api: ApiClient) -> None:
         )
     page = int(st.session_state.get("page", 1))
     try:
-        results = api.search_products(
-            q or None, sort=sort, page=page, page_size=PAGE_SIZE, **filters
-        )
+        with st.spinner("Se încarcă produsele…"):
+            results = api.search_products(
+                q or None, sort=sort, page=page, page_size=PAGE_SIZE, **filters
+            )
     except ApiError as exc:
-        st.error(f"Nu am putut încărca produsele: {exc}")
+        show_api_error(exc, "produsele")
         return
 
     if results.total == 0:
@@ -246,9 +275,10 @@ def history_chart(api: ApiClient, product_id: int) -> None:
     st.subheader("Istoricul prețurilor")
     label = st.selectbox("Perioada", options=list(HISTORY_PERIODS), index=1, key="period")
     try:
-        history = api.get_history(product_id, days=HISTORY_PERIODS[label])
+        with st.spinner("Se încarcă istoricul…"):
+            history = api.get_history(product_id, days=HISTORY_PERIODS[label])
     except ApiError as exc:
-        st.error(f"Nu am putut încărca istoricul: {exc}")
+        show_api_error(exc, "istoricul prețurilor")
         return
     rows = history_rows(history)
     if not rows:
@@ -262,7 +292,7 @@ def history_chart(api: ApiClient, product_id: int) -> None:
             x=alt.X("Data:T", title=None, axis=alt.Axis(format="%d.%m", tickCount=8, grid=False)),
             y=alt.Y("Preț (lei):Q", title="lei", scale=alt.Scale(zero=False)),
             color=alt.Color("Magazin:N", title=None, legend=alt.Legend(orient="bottom")),
-            tooltip=["Magazin", alt.Tooltip("Data:T", format="%d.%m.%Y %H:%M"), "Preț (lei)"],
+            tooltip=["Magazin", alt.Tooltip("Data:T", format="%d.%m.%Y %H:%M"), "Preț"],
         )
     )
     st.altair_chart(chart, width="stretch")
@@ -272,12 +302,13 @@ def history_chart(api: ApiClient, product_id: int) -> None:
 def product_page(api: ApiClient, product_id: int) -> None:
     st.button("← Înapoi la rezultate", on_click=close_product, type="tertiary")
     try:
-        product = api.get_product(product_id)
+        with st.spinner("Se încarcă produsul…"):
+            product = api.get_product(product_id)
     except NotFound:
         st.error("Produsul nu există (poate a fost șters).")
         return
     except ApiError as exc:
-        st.error(f"Nu am putut încărca produsul: {exc}")
+        show_api_error(exc, "produsul")
         return
     left, right = st.columns([1, 2], gap="large")
     with left:
@@ -308,9 +339,10 @@ def competitors_page(api: ApiClient) -> None:
         return
     brand = st.selectbox("Brand", brands, key="cmp_brand")
     try:
-        comparison = api.compare(brand)
+        with st.spinner("Se calculează comparația…"):
+            comparison = api.compare(brand)
     except ApiError as exc:
-        st.error(f"Nu am putut încărca comparația: {exc}")
+        show_api_error(exc, "comparația")
         return
     if not comparison.products:
         st.info(f"Niciun produs {brand} nu are încă oferte.")
@@ -358,14 +390,16 @@ def main() -> None:
     api = get_client()
     header()
     raw_id = st.query_params.get("product")
-    if raw_id is not None:
-        if raw_id.isdigit():
-            product_page(api, int(raw_id))
-            return
+    if raw_id is not None and not raw_id.isdigit():
         close_product()
-    with st.sidebar:
-        choice = st.radio("Pagina", list(PAGES), key="nav")
-    PAGES[choice](api)
+        raw_id = None
+    if raw_id is not None:
+        product_page(api, int(raw_id))
+    else:
+        with st.sidebar:
+            choice = st.radio("Pagina", list(PAGES), key="nav")
+        PAGES[choice](api)
+    footer()
 
 
 main()

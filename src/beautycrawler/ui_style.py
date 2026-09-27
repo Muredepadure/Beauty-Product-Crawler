@@ -220,6 +220,15 @@ a.bc-shop-btn:hover {{ filter: brightness(1.1); }}
 .bc-stat-value .bc-pill {{ font-size: 1.05rem; padding: 0.15rem 0.7rem; }}
 .bc-stat-label, .bc-stat-foot {{ font-size: 0.8rem; opacity: 0.72; }}
 
+/* Footer with data freshness. */
+.bc-footer {{
+    margin-top: 2.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(128, 128, 128, 0.25);
+    font-size: 0.8rem;
+    opacity: 0.72;
+}}
+
 /* Sidebar filter group titles. */
 .bc-filter-group {{
     font-size: 0.75rem;

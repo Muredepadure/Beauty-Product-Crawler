@@ -1,17 +1,20 @@
 """Pure helpers that shape API data for the Streamlit UI (kept out of the Streamlit
 script so they are typed and unit-tested)."""
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
+from datetime import UTC, datetime, tzinfo
 from decimal import Decimal
 from html import escape
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from beautycrawler.api.schemas import (
     BrandComparison,
     ProductDetail,
     ProductHistory,
     ProductSummary,
+    RetailerOut,
 )
-from beautycrawler.ui_client import format_lei
+from beautycrawler.ui_client import ApiError, format_lei
 from beautycrawler.ui_style import ABOVE_MARKET, BELOW_MARKET, GREEN_RGB, RED_RGB
 
 SORT_LABELS: dict[str, str] = {
@@ -209,6 +212,7 @@ def history_rows(history: ProductHistory) -> list[dict[str, object]]:
                     "Magazin": store,
                     "Data": point.scraped_at,
                     "Preț (lei)": point.price_bani / 100 if point.in_stock else None,
+                    "Preț": format_lei(point.price_bani) if point.in_stock else "Stoc epuizat",
                 }
             )
         if series.points and series.last_seen_at > series.points[-1].scraped_at:
@@ -216,6 +220,43 @@ def history_rows(history: ProductHistory) -> list[dict[str, object]]:
             last["Data"] = series.last_seen_at
             rows.append(last)
     return rows
+
+
+# --- P10.6 polish ---------------------------------------------------------------------
+
+START_API_COMMAND = "python -m uvicorn beautycrawler.api.main:app --port 8000"
+
+
+def api_error_message(exc: ApiError, what: str, base_url: str) -> str:
+    """Markdown for a failed API call: how to start the API when it is unreachable,
+    otherwise the error itself. `what` completes "Nu am putut încărca …"."""
+    if exc.status_code is None:
+        return (
+            f"Nu mă pot conecta la API ({base_url}), deci nu am putut încărca {what}. "
+            f"Pornește-l dintr-un terminal, din folderul proiectului:\n\n"
+            f"```\n{START_API_COMMAND}\n```"
+        )
+    return f"Nu am putut încărca {what}: {exc}"
+
+
+def local_zone() -> tzinfo:
+    """Romanian time; UTC where the system has no time zone data."""
+    try:
+        return ZoneInfo("Europe/Bucharest")
+    except ZoneInfoNotFoundError:
+        return UTC
+
+
+def freshness_text(retailers: Iterable[RetailerOut], zone: tzinfo | None = None) -> str:
+    """Footer line from the newest crawl of any listing, e.g. "Actualizat la
+    27.09.2026, 14:05"."""
+    seen = [r.last_seen_at for r in retailers if r.last_seen_at is not None]
+    if not seen:
+        return "Încă nu există prețuri de la magazine."
+    zone = zone or local_zone()
+    newest: datetime = max(seen).astimezone(zone)
+    suffix = " UTC" if zone is UTC else ""
+    return f"Actualizat la {newest:%d.%m.%Y, %H:%M}{suffix}"
 
 
 def active_filter_count(filters: Mapping[str, object]) -> int:
