@@ -120,6 +120,22 @@ CSS = f"""
 .bc-card-price.bc-muted {{ font-size: 1rem; font-weight: 600; opacity: 0.72; }}
 .bc-card-stores {{ margin-bottom: 0.25rem; }}
 
+/* Sidebar filter group titles. */
+.bc-filter-group {{
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.72;
+    margin-top: 0.5rem;
+}}
+
+/* Empty search result. */
+.bc-empty {{ text-align: center; padding: 2.5rem 1rem 1rem; }}
+.bc-empty-icon {{ font-size: 2.5rem; opacity: 0.5; }}
+.bc-empty-title {{ font-size: 1.25rem; font-weight: 650; margin: 0.5rem 0 0.25rem; }}
+.bc-empty-hint {{ opacity: 0.72; }}
+
 /* Phone width: narrower side gutters, smaller page titles. */
 @media (max-width: 640px) {{
     [data-testid="stMainBlockContainer"] {{

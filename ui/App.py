@@ -7,6 +7,7 @@ Talks to the API only through `beautycrawler.ui_client.ApiClient` (base URL from
 product links can be shared.
 """
 
+from html import escape
 from typing import Any
 
 import altair as alt
@@ -18,9 +19,11 @@ from beautycrawler.ui_client import ApiClient, ApiError, NotFound
 from beautycrawler.ui_data import (
     MARKET_BAND_PCT,
     SORT_LABELS,
+    active_filter_count,
     card_html,
     card_price_line,
     card_subtitle,
+    empty_hint,
     format_pct,
     history_rows,
     lei_to_bani,
@@ -89,6 +92,13 @@ def product_card(product: ProductSummary) -> None:
 
 
 ALL_BRANDS = "Toate brandurile"
+FILTER_DEFAULTS: dict[str, object] = {
+    "brand": ALL_BRANDS,
+    "category": "",
+    "min_lei": 0.0,
+    "max_lei": 0.0,
+    "in_stock": False,
+}
 
 
 @st.cache_data(ttl=600)
@@ -99,48 +109,98 @@ def brand_names() -> list[str]:
         return []
 
 
-def search_filters(api: ApiClient) -> dict[str, Any]:
-    """Sidebar filters (P7.3) as `ApiClient.search_products` keyword arguments."""
+def reset_filters() -> None:
+    for key, default in FILTER_DEFAULTS.items():
+        st.session_state[key] = default
+    reset_page()
+
+
+def filter_group(title: str) -> None:
+    st.markdown(f'<div class="bc-filter-group">{title}</div>', unsafe_allow_html=True)
+
+
+def search_filters() -> dict[str, Any]:
+    """Sidebar filters (P7.3, grouped in P10.3) as `ApiClient.search_products` kwargs."""
     with st.sidebar:
         st.header("Filtre")
+        filter_group("Produs")
         brand = st.selectbox(
             "Brand", [ALL_BRANDS, *brand_names()], key="brand", on_change=reset_page
         )
-        category = st.text_input("Categorie", key="category", on_change=reset_page)
-        st.caption("Preț (lei) — 0 înseamnă fără limită")
+        category = st.text_input(
+            "Categorie", key="category", placeholder="ex. Seruri", on_change=reset_page
+        )
+        filter_group("Preț (lei)")
         low, high = st.columns(2)
         min_lei = low.number_input(
-            "De la", min_value=0.0, step=10.0, key="min_lei", on_change=reset_page
+            "De la",
+            min_value=0.0,
+            step=10.0,
+            key="min_lei",
+            help="0 înseamnă fără limită",
+            on_change=reset_page,
         )
         max_lei = high.number_input(
-            "Până la", min_value=0.0, step=10.0, key="max_lei", on_change=reset_page
+            "Până la",
+            min_value=0.0,
+            step=10.0,
+            key="max_lei",
+            help="0 înseamnă fără limită",
+            on_change=reset_page,
         )
+        filter_group("Disponibilitate")
         in_stock = st.checkbox("Doar produse în stoc", key="in_stock", on_change=reset_page)
-    return {
-        "brand": None if brand == ALL_BRANDS else brand,
-        "category": category or None,
-        "min_price_bani": lei_to_bani(min_lei),
-        "max_price_bani": lei_to_bani(max_lei),
-        "in_stock": in_stock,
-    }
+        filters = {
+            "brand": None if brand == ALL_BRANDS else brand,
+            "category": category or None,
+            "min_price_bani": lei_to_bani(min_lei),
+            "max_price_bani": lei_to_bani(max_lei),
+            "in_stock": in_stock,
+        }
+        st.button(
+            "Resetează filtrele",
+            key="reset_filters",
+            on_click=reset_filters,
+            disabled=not active_filter_count(filters),
+            width="stretch",
+        )
+    return filters
+
+
+def empty_state(query: str | None, filters: dict[str, Any]) -> None:
+    active = active_filter_count(filters)
+    st.markdown(
+        '<div class="bc-empty"><div class="bc-empty-icon" aria-hidden="true">🔍</div>'
+        '<div class="bc-empty-title">Niciun produs găsit</div>'
+        f'<div class="bc-empty-hint">{escape(empty_hint(query, active))}</div></div>',
+        unsafe_allow_html=True,
+    )
+    if active:
+        with st.container(horizontal=True, horizontal_alignment="center"):
+            st.button("Resetează filtrele", key="reset_filters_empty", on_click=reset_filters)
 
 
 def search_page(api: ApiClient) -> None:
     st.title("🔎 Caută produse")
     q = st.text_input(
-        "Produs sau brand",
+        "Caută un produs sau un brand",
         key="q",
-        placeholder="ex. Effaclar Duo, CeraVe, ser cu vitamina C",
+        placeholder="Produs sau brand, ex. Effaclar Duo",
+        icon=":material/search:",
+        label_visibility="collapsed",
         on_change=reset_page,
     )
-    sort = st.selectbox(
-        "Sortează",
-        options=list(SORT_LABELS),
-        format_func=lambda key: SORT_LABELS[key],
-        key="sort",
-        on_change=reset_page,
-    )
-    filters = search_filters(api)
+    filters = search_filters()
+    count_col, sort_col = st.columns([3, 1], vertical_alignment="center")
+    with sort_col:
+        sort = st.selectbox(
+            "Sortează",
+            options=list(SORT_LABELS),
+            format_func=lambda key: SORT_LABELS[key],
+            key="sort",
+            label_visibility="collapsed",
+            on_change=reset_page,
+        )
     page = int(st.session_state.get("page", 1))
     try:
         results = api.search_products(
@@ -151,9 +211,9 @@ def search_page(api: ApiClient) -> None:
         return
 
     if results.total == 0:
-        st.info("Niciun produs găsit. Încearcă alt termen de căutare.")
+        empty_state(q, filters)
         return
-    st.subheader(products_label(results.total))
+    count_col.subheader(products_label(results.total))
     columns = st.columns(3)
     for i, product in enumerate(results.items):
         with columns[i % 3]:

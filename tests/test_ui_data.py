@@ -10,11 +10,13 @@ from beautycrawler.api.schemas import (
     ProductSummary,
 )
 from beautycrawler.ui_data import (
+    active_filter_count,
     card_badges,
     card_html,
     card_price_line,
     card_subtitle,
     discount_pct,
+    empty_hint,
     format_pct,
     format_size,
     history_rows,
@@ -100,6 +102,24 @@ def test_card_lines() -> None:
     )
     assert card_subtitle(_summary()) == "La Roche-Posay · 40 ml"
     assert card_subtitle(_summary(brand=None, size_value=None)) == ""
+
+
+# --- P10.3: search filters and empty state --------------------------------------------
+
+
+def test_active_filter_count() -> None:
+    none = {"brand": None, "category": None, "min_price_bani": None, "in_stock": False}
+    assert active_filter_count(none) == 0
+    assert active_filter_count(none | {"brand": "CeraVe", "in_stock": True}) == 2
+    assert active_filter_count(none | {"category": "", "min_price_bani": 0}) == 1  # 0 is set
+
+
+def test_empty_hint() -> None:
+    assert empty_hint("cerave", 1).startswith("Încearcă mai puține filtre")
+    assert empty_hint(None, 2).startswith("Încearcă mai puține filtre")
+    assert empty_hint("cerve", 0).startswith("Verifică ortografia")
+    assert empty_hint("   ", 0) == "Încă nu există produse în catalog."
+    assert empty_hint(None, 0) == "Încă nu există produse în catalog."
 
 
 # --- P10.2: search result cards --------------------------------------------------------

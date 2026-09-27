@@ -1,6 +1,7 @@
 """Pure helpers that shape API data for the Streamlit UI (kept out of the Streamlit
 script so they are typed and unit-tested)."""
 
+from collections.abc import Mapping
 from decimal import Decimal
 from html import escape
 
@@ -175,6 +176,22 @@ def history_rows(history: ProductHistory) -> list[dict[str, object]]:
             last["Data"] = series.last_seen_at
             rows.append(last)
     return rows
+
+
+def active_filter_count(filters: Mapping[str, object]) -> int:
+    """How many search filters are set (`ApiClient.search_products` kwargs; None, False
+    and "" mean "not set")."""
+    # `is` checks: 0 == False, but a 0 bani bound is still a filter.
+    return sum(1 for v in filters.values() if v is not None and v is not False and v != "")
+
+
+def empty_hint(query: str | None, active_filters: int) -> str:
+    """What to try next when a search finds nothing."""
+    if active_filters:
+        return "Încearcă mai puține filtre sau alt termen de căutare."
+    if query and query.strip():
+        return "Verifică ortografia sau caută doar după brand (ex. „CeraVe”)."
+    return "Încă nu există produse în catalog."
 
 
 def lei_to_bani(lei: float | None) -> int | None:

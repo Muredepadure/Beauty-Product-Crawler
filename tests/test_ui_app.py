@@ -147,7 +147,30 @@ def test_search_query_filters_cards(ui_api: respx.MockRouter, shop: dict[str, in
     assert at.subheader[0].value == "1 produs"
     assert card_names(at) == ["Cicaplast Baume B5+"]
     at.text_input(key="q").input("nu exista").run()
-    assert "Niciun produs găsit" in at.info[0].value
+    assert "Niciun produs găsit" in markdown(at)
+    assert "Verifică ortografia" in markdown(at)
+    assert not at.subheader  # no "0 produse" above the empty state
+    assert [b.key for b in at.button if b.label == "Resetează filtrele"] == ["reset_filters"]
+
+
+def test_search_empty_database(ui_api: respx.MockRouter) -> None:
+    at = run_app()
+    assert not at.exception
+    assert "Încă nu există produse în catalog." in markdown(at)
+
+
+def test_reset_filters(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    at = run_app()
+    assert at.button(key="reset_filters").disabled  # nothing to reset
+    at.selectbox(key="brand").select("CeraVe").run()
+    at.checkbox(key="in_stock").check().run()  # CeraVe's only product is out of stock
+    assert "Încearcă mai puține filtre" in markdown(at)
+    assert not at.button(key="reset_filters").disabled
+    at.button(key="reset_filters_empty").click().run()
+    assert at.selectbox(key="brand").value == "Toate brandurile"
+    assert at.checkbox(key="in_stock").value is False
+    assert len(card_names(at)) == 3
+    assert at.button(key="reset_filters").disabled
 
 
 def test_search_sort_by_price(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
