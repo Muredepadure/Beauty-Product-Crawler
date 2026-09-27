@@ -66,6 +66,20 @@ def _offer_stats() -> Subquery:
     )
 
 
+def _on_sale(session: Session, lowest: dict[int, int]) -> set[int]:
+    """Products whose lowest in-stock price comes with a higher old (pre-sale) price."""
+    if not lowest:
+        return set()
+    offers = session.execute(
+        select(Offer.product_id, Offer.price_bani, Offer.old_price_bani).where(
+            Offer.in_stock,
+            Offer.product_id.in_(lowest),
+            Offer.old_price_bani > Offer.price_bani,
+        )
+    )
+    return {pid for pid, price, _ in offers if pid is not None and price == lowest[pid]}
+
+
 def _categories_matching(session: Session, category: str) -> list[str]:
     """Stored category spellings equal to `category` ignoring case and diacritics."""
     wanted = fold(category)
@@ -133,6 +147,10 @@ def list_products(
     rows = session.execute(
         base.order_by(*order, Product.id).limit(page_size).offset((page - 1) * page_size)
     ).all()
+    on_sale = _on_sale(
+        session,
+        {r.Product.id: r.lowest_price for r in rows if r.lowest_price is not None},
+    )
 
     items = [
         ProductSummary(
@@ -148,6 +166,7 @@ def list_products(
             offer_count=row.offer_count or 0,
             retailer_count=row.retailer_count or 0,
             in_stock=bool(row.any_in_stock),
+            on_sale=row.Product.id in on_sale,
         )
         for row in rows
     ]
@@ -190,6 +209,10 @@ def get_product(
         offer_count=len(offers),
         retailer_count=len({o.retailer_id for o in offers}),
         in_stock=lowest is not None,
+        on_sale=any(
+            o.in_stock and o.price_bani == lowest and (o.old_price_bani or 0) > o.price_bani
+            for o in offers
+        ),
         offers=[
             OfferOut(
                 id=o.id,

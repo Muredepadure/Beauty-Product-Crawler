@@ -45,7 +45,9 @@ def catalogue(api_session: Session) -> dict[str, int]:
     revita = product(loreal, "Revitalift Filler ser", "Seruri")
     nobrand = product(None, "Apă micelară", None)
 
-    def offer(p: Product, retailer: Retailer, price: int, in_stock: bool = True) -> None:
+    def offer(
+        p: Product, retailer: Retailer, price: int, in_stock: bool = True, old: int | None = None
+    ) -> None:
         s.add(
             Offer(
                 product=p,
@@ -53,17 +55,18 @@ def catalogue(api_session: Session) -> dict[str, int]:
                 url=f"https://{retailer.domain}/{price}",
                 title=p.name,
                 price_bani=price,
+                old_price_bani=old,
                 in_stock=in_stock,
             )
         )
 
-    offer(duo, notino, 8_990)
+    offer(duo, notino, 8_990, old=9_990)  # on sale, but not the lowest price
     offer(duo, emag, 7_450)
     offer(duo, drmax, 6_000, in_stock=False)  # cheapest but unavailable
     offer(cica, notino, 5_500)
     offer(revita, emag, 12_000)
-    offer(revita, drmax, 9_900)
-    offer(cleanser, emag, 4_000, in_stock=False)
+    offer(revita, drmax, 9_900, old=11_000)  # on sale at the lowest price
+    offer(cleanser, emag, 4_000, in_stock=False, old=5_000)  # sale, but not in stock
     s.commit()
     return {
         "duo": duo.id,
@@ -114,6 +117,7 @@ def test_item_shape_and_offer_stats(client: TestClient, catalogue: dict[str, int
         "offer_count": 3,
         "retailer_count": 3,
         "in_stock": True,
+        "on_sale": False,
     }
     cleanser = items[catalogue["cleanser"]]
     assert (cleanser["lowest_price_bani"], cleanser["in_stock"]) == (None, False)
@@ -305,6 +309,16 @@ def test_product_detail_nothing_in_stock(client: TestClient, catalogue: dict[str
     body = client.get(f"/api/products/{catalogue['cleanser']}").json()
     assert body["lowest_price_bani"] is None
     assert [o["is_cheapest"] for o in body["offers"]] == [False]
+
+
+def test_on_sale_means_the_lowest_in_stock_price_is_discounted(
+    client: TestClient, catalogue: dict[str, int]
+) -> None:
+    items = {p["id"]: p["on_sale"] for p in client.get("/api/products").json()["items"]}
+    on_sale = {name for name, pid in catalogue.items() if items[pid]}
+    assert on_sale == {"revita"}
+    for name, pid in catalogue.items():  # the product page agrees
+        assert client.get(f"/api/products/{pid}").json()["on_sale"] is (name == "revita")
 
 
 def test_product_detail_matches_list_summary(client: TestClient, catalogue: dict[str, int]) -> None:

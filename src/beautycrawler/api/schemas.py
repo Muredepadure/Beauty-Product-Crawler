@@ -31,6 +31,9 @@ class ProductSummary(BaseModel):
     offer_count: int = Field(description="Listings linked to this product")
     retailer_count: int = Field(description="Distinct retailers with a listing")
     in_stock: bool = Field(description="At least one listing is in stock")
+    on_sale: bool = Field(
+        False, description="A listing at the lowest in-stock price shows a higher old price"
+    )
 
 
 class ProductPage(BaseModel):

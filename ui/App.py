@@ -18,6 +18,7 @@ from beautycrawler.ui_client import ApiClient, ApiError, NotFound
 from beautycrawler.ui_data import (
     MARKET_BAND_PCT,
     SORT_LABELS,
+    card_html,
     card_price_line,
     card_subtitle,
     format_pct,
@@ -77,13 +78,7 @@ def header() -> None:
 
 def product_card(product: ProductSummary) -> None:
     with st.container(border=True):
-        if product.image_url:
-            st.image(product.image_url, width="stretch")
-        st.markdown(f"**{product.name}**")
-        subtitle = card_subtitle(product)
-        if subtitle:
-            st.caption(subtitle)
-        st.markdown(card_price_line(product))
+        st.markdown(card_html(product), unsafe_allow_html=True)
         st.button(
             "Vezi prețurile",
             key=f"open-{product.id}",

@@ -10,6 +10,8 @@ from beautycrawler.api.schemas import (
     ProductSummary,
 )
 from beautycrawler.ui_data import (
+    card_badges,
+    card_html,
     card_price_line,
     card_subtitle,
     discount_pct,
@@ -25,6 +27,7 @@ from beautycrawler.ui_data import (
     position_rows,
     products_label,
     retailer_rows,
+    safe_image_url,
     stores_label,
 )
 
@@ -97,6 +100,87 @@ def test_card_lines() -> None:
     )
     assert card_subtitle(_summary()) == "La Roche-Posay · 40 ml"
     assert card_subtitle(_summary(brand=None, size_value=None)) == ""
+
+
+# --- P10.2: search result cards --------------------------------------------------------
+
+
+def test_card_html_in_stock() -> None:
+    html = card_html(_summary(image_url="https://cdn.test/duo.jpg"))
+    assert html.startswith('<div class="bc-card">') and "\n" not in html
+    assert '<img src="https://cdn.test/duo.jpg" alt="Effaclar Duo+" loading="lazy">' in html
+    assert "bc-card-placeholder" not in html
+    assert '<div class="bc-card-brand">La Roche-Posay</div>' in html
+    assert '<div class="bc-card-name" title="Effaclar Duo+">Effaclar Duo+</div>' in html
+    assert '<div class="bc-card-size">40 ml</div>' in html
+    assert '<div class="bc-card-price"><span class="bc-from">de la</span> 74,50 lei</div>' in html
+    assert '<div class="bc-card-stores">la 2 magazine</div>' in html
+    assert '<div class="bc-card-badges"></div>' in html
+
+
+def test_card_html_single_listing_has_no_de_la() -> None:
+    html = card_html(_summary(offer_count=1, retailer_count=1))
+    assert '<div class="bc-card-price">74,50 lei</div>' in html
+    assert '<div class="bc-card-stores">la 1 magazin</div>' in html
+
+
+def test_card_html_out_of_stock_and_without_offers() -> None:
+    out = card_html(_summary(lowest_price_bani=None, in_stock=False))
+    assert '<span class="bc-badge bc-badge-out">Stoc epuizat</span>' in out
+    assert '<div class="bc-card-price bc-muted">Indisponibil</div>' in out
+    none = card_html(
+        _summary(lowest_price_bani=None, in_stock=False, offer_count=0, retailer_count=0)
+    )
+    assert "bc-badge" not in none  # nothing to be out of stock of
+    assert '<div class="bc-card-price bc-muted">Fără oferte încă</div>' in none
+    assert '<div class="bc-card-stores">&nbsp;</div>' in none
+
+
+def test_card_html_keeps_every_line_for_equal_heights() -> None:
+    html = card_html(_summary(brand=None, size_value=None))
+    assert '<div class="bc-card-brand">&nbsp;</div>' in html
+    assert '<div class="bc-card-size">&nbsp;</div>' in html
+    assert '<span class="bc-card-placeholder" aria-hidden="true">💄</span>' in html
+
+
+def test_card_badges() -> None:
+    assert card_badges(_summary()) == []
+    assert card_badges(_summary(on_sale=True)) == ["Reducere"]
+    assert card_badges(_summary(on_sale=True, in_stock=False)) == ["Reducere", "Stoc epuizat"]
+    html = card_html(_summary(on_sale=True))
+    assert '<span class="bc-badge bc-badge-sale">Reducere</span>' in html
+
+
+def test_card_html_escapes_scraped_text() -> None:
+    html = card_html(
+        _summary(
+            name='Ser <script>alert(1)</script> "10%"',
+            brand="L'Oréal & Co",
+            image_url='https://cdn.test/a.jpg" onerror="alert(1)',
+        )
+    )
+    assert "<script>" not in html
+    assert "Ser &lt;script&gt;alert(1)&lt;/script&gt; &quot;10%&quot;" in html
+    assert "L&#x27;Oréal &amp; Co" in html
+    assert 'onerror="' not in html
+    assert 'src="https://cdn.test/a.jpg&quot; onerror=&quot;alert(1)"' in html
+
+
+@pytest.mark.parametrize(
+    ("url", "safe"),
+    [
+        ("https://cdn.test/a.jpg", True),
+        ("HTTP://cdn.test/a.jpg", True),
+        ("javascript:alert(1)", False),
+        ("data:image/png;base64,xx", False),
+        ("//cdn.test/a.jpg", False),
+        ("", False),
+        (None, False),
+    ],
+)
+def test_safe_image_url(url: str | None, safe: bool) -> None:
+    assert safe_image_url(url) == (url if safe else None)
+    assert ("<img" in card_html(_summary(image_url=url))) is safe
 
 
 @pytest.mark.parametrize(("total", "pages"), [(0, 1), (1, 1), (24, 1), (25, 2), (48, 2), (49, 3)])

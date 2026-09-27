@@ -4,6 +4,8 @@ The UI's HTTP calls are routed (by respx) into the FastAPI test app backed by an
 in-memory database, so these are end-to-end tests without any network.
 """
 
+import html
+import re
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -96,6 +98,15 @@ def markdown(at: AppTest) -> str:
     return "\n".join(m.value for m in at.markdown)
 
 
+def card_markup(at: AppTest) -> list[str]:
+    return [m.value for m in at.markdown if m.value.startswith('<div class="bc-card">')]
+
+
+def card_names(at: AppTest) -> list[str]:
+    names = (re.search(r'class="bc-card-name"[^>]*>(.*?)</div>', c) for c in card_markup(at))
+    return [html.unescape(m.group(1)) for m in names if m]
+
+
 # --- P7.1: search page -------------------------------------------------------------
 
 
@@ -104,11 +115,19 @@ def test_search_lists_products_as_cards(ui_api: respx.MockRouter, shop: dict[str
     assert not at.exception
     assert at.title[0].value == "🔎 Caută produse"
     assert at.subheader[0].value == "3 produse"
-    text = markdown(at)
-    assert "**Effaclar Duo+**" in text
-    assert "de la 74,50 lei · 2 magazine" in text  # emag's 74,50 beats notino's 79,90
-    assert "Stoc epuizat · 1 magazin" in text
-    assert "La Roche-Posay · 40 ml" in [c.value for c in at.caption]
+    cards = dict(zip(card_names(at), card_markup(at), strict=True))
+    assert list(cards) == ["Cicaplast Baume B5+", "Effaclar Duo+", "Hydrating Cleanser"]
+    duo = cards["Effaclar Duo+"]
+    assert '<div class="bc-card-brand">La Roche-Posay</div>' in duo
+    assert '<div class="bc-card-size">40 ml</div>' in duo
+    # emag's 74,50 beats notino's 79,90
+    assert '<span class="bc-from">de la</span> 74,50 lei' in duo
+    assert '<div class="bc-card-stores">la 2 magazine</div>' in duo
+    assert "bc-badge" not in duo
+    cleanser = cards["Hydrating Cleanser"]
+    assert '<span class="bc-badge bc-badge-out">Stoc epuizat</span>' in cleanser
+    assert '<div class="bc-card-stores">la 1 magazin</div>' in cleanser
+    assert all("bc-card-placeholder" in c for c in cards.values())  # no images
     assert len([b for b in at.button if b.label == "Vezi prețurile"]) == 3
 
 
@@ -126,7 +145,7 @@ def test_search_query_filters_cards(ui_api: respx.MockRouter, shop: dict[str, in
     at = run_app()
     at.text_input(key="q").input("CICAPLAST Bâume").run()  # case/diacritics ignored
     assert at.subheader[0].value == "1 produs"
-    assert "**Cicaplast Baume B5+**" in markdown(at)
+    assert card_names(at) == ["Cicaplast Baume B5+"]
     at.text_input(key="q").input("nu exista").run()
     assert "Niciun produs găsit" in at.info[0].value
 
@@ -134,8 +153,7 @@ def test_search_query_filters_cards(ui_api: respx.MockRouter, shop: dict[str, in
 def test_search_sort_by_price(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
     at = run_app()
     at.selectbox(key="sort").select("price_asc").run()
-    names = [m.value for m in at.markdown if m.value.startswith("**")]
-    assert names == ["**Cicaplast Baume B5+**", "**Effaclar Duo+**", "**Hydrating Cleanser**"]
+    assert card_names(at) == ["Cicaplast Baume B5+", "Effaclar Duo+", "Hydrating Cleanser"]
 
 
 def test_search_shows_api_errors(ui_api: respx.MockRouter) -> None:
@@ -215,10 +233,6 @@ def test_product_page_without_offers(ui_api: respx.MockRouter, api_session: Sess
 
 
 # --- P7.3: filters ---------------------------------------------------------------------
-
-
-def card_names(at: AppTest) -> list[str]:
-    return [m.value.strip("*") for m in at.markdown if m.value.startswith("**")]
 
 
 def test_brand_filter(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:

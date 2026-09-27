@@ -49,6 +49,77 @@ CSS = f"""
     letter-spacing: 0.01em;
 }}
 
+/* Search result cards (markup: `ui_data.card_html`). */
+.bc-card-media {{
+    position: relative;
+    aspect-ratio: 1 / 1;
+    background: #FFFFFF;
+    border: 1px solid rgba(128, 128, 128, 0.18);
+    border-radius: 0.5rem;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.75rem;
+}}
+.bc-card-media img {{
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    padding: 8%;
+    box-sizing: border-box;
+}}
+.bc-card-placeholder {{ font-size: 3rem; opacity: 0.35; }}
+.bc-card-badges {{
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}}
+.bc-badge {{
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.5;
+    padding: 0.1rem 0.55rem;
+    border-radius: 999px;
+    color: #FFFFFF;
+}}
+.bc-badge-sale {{ background: {ACCENT_LIGHT}; }}
+.bc-badge-out {{ background: #5E585B; }}
+.bc-card-brand,
+.bc-card-size,
+.bc-card-stores {{
+    font-size: 0.85rem;
+    opacity: 0.72;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}}
+.bc-card-brand {{ font-variant-caps: all-small-caps; letter-spacing: 0.06em; }}
+.bc-card-name {{
+    font-weight: 600;
+    line-height: 1.35;
+    height: 2.7em;  /* always two lines, so cards in a row line up */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}}
+.bc-card-price {{
+    font-size: 1.35rem;
+    font-weight: 700;
+    height: 2.2rem;  /* same with or without "de la" / for the muted text */
+    display: flex;
+    align-items: baseline;
+    gap: 0.3rem;
+    margin-top: 0.4rem;
+}}
+.bc-card-price .bc-from {{ font-size: 0.85rem; font-weight: 400; opacity: 0.72; }}
+.bc-card-price.bc-muted {{ font-size: 1rem; font-weight: 600; opacity: 0.72; }}
+.bc-card-stores {{ margin-bottom: 0.25rem; }}
+
 /* Phone width: narrower side gutters, smaller page titles. */
 @media (max-width: 640px) {{
     [data-testid="stMainBlockContainer"] {{
@@ -56,6 +127,7 @@ CSS = f"""
         padding-right: 1rem;
     }}
     h1 {{ font-size: 1.6rem !important; }}
+    .bc-card-media {{ aspect-ratio: 4 / 3; }}  /* one card per row: keep it short */
 }}
 </style>
 """
