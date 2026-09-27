@@ -126,7 +126,7 @@ small, well-scoped CSS block over heavy custom HTML. Must look right in light an
 and on a phone-width window. In each PR, describe the visual changes; attach screenshots
 if the environment can take them (e.g. Playwright against a local run with seeded data).
 
-- [ ] **P10.1** Design foundation: theme in `.streamlit/config.toml` (one accent colour suited to beauty, neutral greys, readable font sizes), page title/icon, a slim header with the app name and a one-line tagline, consistent spacing. Collect shared styling in one module (e.g. `ui/style.py`) instead of scattering CSS.
+- [x] **P10.1** Design foundation: theme in `.streamlit/config.toml` (one accent colour suited to beauty, neutral greys, readable font sizes), page title/icon, a slim header with the app name and a one-line tagline, consistent spacing. Collect shared styling in one module (e.g. `ui/style.py`) instead of scattering CSS.
 - [ ] **P10.2** Search results: tidy product cards — fixed-ratio image on a light background, brand in small caps above the name, size, **lowest price** prominent, "la N magazine" (retailer count), badges for "Reducere" (on sale) and "Stoc epuizat" (out of stock); consistent card heights; placeholder image when missing.
 - [ ] **P10.3** Search bar and filters: search field at the top with a clear placeholder, filters in the sidebar grouped and labelled, result count and sort in one row, friendly empty state ("Niciun produs găsit") with a hint.
 - [ ] **P10.4** Product page: header with image, brand, name, size; price comparison table with retailer name, price, old price struck through, stock status, "Vezi în magazin" button; cheapest row highlighted; price-history chart styled to match the theme; back link to results.

@@ -30,10 +30,21 @@ from beautycrawler.ui_data import (
     products_label,
     retailer_rows,
 )
+from beautycrawler.ui_style import (
+    ABOVE_MARKET,
+    BELOW_MARKET,
+    CHEAPEST_ROW,
+    CSS,
+    HEADER_KEY,
+    PAGE_ICON,
+    PAGE_TITLE,
+    TAGLINE,
+    header_title,
+)
 
 PAGE_SIZE = 24
 
-st.set_page_config(page_title="BeautyCrawler — prețuri cosmetice", page_icon="💄", layout="wide")
+st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="wide")
 
 
 @st.cache_resource
@@ -51,6 +62,14 @@ def close_product() -> None:
 
 def reset_page() -> None:
     st.session_state["page"] = 1
+
+
+def header() -> None:
+    """Shared CSS and the slim app header shown above every page."""
+    st.html(CSS)
+    with st.container(key=HEADER_KEY, horizontal=True, gap="small"):
+        st.markdown(header_title())
+        st.caption(TAGLINE)
 
 
 # ----------------------------------------------------------------------------- search
@@ -113,7 +132,6 @@ def search_filters(api: ApiClient) -> dict[str, Any]:
 
 def search_page(api: ApiClient) -> None:
     st.title("🔎 Caută produse")
-    st.caption("Compară prețurile produselor cosmetice în magazinele online din România.")
     q = st.text_input(
         "Produs sau brand",
         key="q",
@@ -172,7 +190,7 @@ def price_table(product: ProductDetail) -> None:
     cheapest = [bool(r[""]) for r in rows]
 
     def highlight(row: pd.Series) -> list[str]:
-        style = "background-color: rgba(46, 160, 67, 0.18)" if cheapest[row.name] else ""
+        style = CHEAPEST_ROW if cheapest[row.name] else ""
         return [style] * len(row)
 
     st.dataframe(
@@ -244,9 +262,9 @@ def _pct_color(value: object) -> str:
     if not isinstance(value, int | float):
         return ""
     if value < -MARKET_BAND_PCT:
-        return "background-color: rgba(46, 160, 67, 0.20)"
+        return BELOW_MARKET
     if value > MARKET_BAND_PCT:
-        return "background-color: rgba(218, 54, 51, 0.20)"
+        return ABOVE_MARKET
     return ""
 
 
@@ -301,6 +319,7 @@ PAGES = {"🔎 Caută produse": search_page, "🏷️ Comparație prețuri": com
 
 def main() -> None:
     api = get_client()
+    header()
     raw_id = st.query_params.get("product")
     if raw_id is not None:
         if raw_id.isdigit():

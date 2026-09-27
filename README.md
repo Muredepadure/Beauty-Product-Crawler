@@ -148,6 +148,10 @@ All prices are integer **bani** (1 RON = 100 bani); times are UTC.
 streamlit run ui/App.py            # http://localhost:8501 (the API must be running)
 ```
 
+Run it from the repository root: Streamlit reads the theme (accent colour, light and dark
+mode) from `.streamlit/config.toml` in the current directory. Shared names, colours and
+the one custom CSS block live in `src/beautycrawler/ui_style.py`.
+
 - **Caută produse**: search with brand/category/price/stock filters and product cards;
   a product page (`?product=<id>`, shareable) with the price table across retailers
   (cheapest highlighted, links out) and the price-history chart.
@@ -262,9 +266,11 @@ Settings are read from environment variables or `.env` (see [`.env.example`](.en
 │   ├── matching/                # offer -> product matching + review CLI
 │   ├── ui_client.py             # typed API client used by the UI
 │   ├── ui_data.py               # display helpers for the UI
+│   ├── ui_style.py              # UI names, colours and CSS
 │   ├── logs.py                  # text / JSON logging
 │   └── config.py                # pydantic-settings configuration
 ├── ui/App.py                    # Streamlit UI
+├── .streamlit/config.toml       # UI theme
 ├── scripts/seed.py              # seed retailers + demo products
 ├── tests/                       # pytest suite (no network)
 ├── .github/workflows/ci.yml     # lint, type-check, tests on SQLite and Postgres

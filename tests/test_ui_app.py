@@ -20,6 +20,7 @@ from streamlit.testing.v1 import AppTest
 from beautycrawler.config import get_settings
 from beautycrawler.db.models import Brand, Product, Retailer
 from beautycrawler.db.repository import OfferSnapshot, upsert_offer
+from beautycrawler.ui_style import TAGLINE
 
 APP = str(Path(__file__).resolve().parents[1] / "ui" / "App.py")
 API_HOST = "ui-api.test"
@@ -109,6 +110,16 @@ def test_search_lists_products_as_cards(ui_api: respx.MockRouter, shop: dict[str
     assert "Stoc epuizat · 1 magazin" in text
     assert "La Roche-Posay · 40 ml" in [c.value for c in at.caption]
     assert len([b for b in at.button if b.label == "Vezi prețurile"]) == 3
+
+
+def test_header_on_every_page(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    for at in (run_app(), run_app({"product": str(shop["duo"])})):
+        assert not at.exception
+        assert at.markdown[0].value == ":primary[**💄 BeautyCrawler**]"
+        assert at.caption[0].value == TAGLINE
+    at = run_app()
+    at.radio(key="nav").set_value("🏷️ Comparație prețuri").run()
+    assert at.markdown[0].value == ":primary[**💄 BeautyCrawler**]"
 
 
 def test_search_query_filters_cards(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:

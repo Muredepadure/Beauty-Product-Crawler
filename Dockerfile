@@ -21,6 +21,7 @@ COPY src ./src
 COPY alembic.ini ./
 COPY scripts ./scripts
 COPY ui ./ui
+COPY .streamlit ./.streamlit
 RUN pip install --no-deps . \
     && useradd --create-home --uid 10001 app
 USER app
