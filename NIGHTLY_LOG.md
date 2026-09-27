@@ -24,8 +24,8 @@ Done:
   non-breaking spaces. `Spider.is_wanted_sitemap()` hook to skip image/review/blog sitemaps.
 - Nightly prompt: end the session after the PR; no follow-up check-ins.
 Tests: 626/626 passed, lint ✓, format ✓, mypy ✓ (src, scripts, tests)
-Next: P3.1 rest (eMAG, Sephora, Douglas, Makeup.ro, Elefant) — the cloud environment now allows
-the retailer domains — then their spiders using parfimo.py as the template.
+Next: Phase 10 (UI redesign), starting with P10.1. Phase 3 spiders and Phase 9 (data
+sources) are on hold: the owner is deciding between affiliate product feeds and crawling.
 Blockers / questions for owner: still open from 2026-09-26 — `pack_count` column for multipacks.
 
 ## 2026-09-27 — claude/nightly-2026-09-26-P3.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/6
