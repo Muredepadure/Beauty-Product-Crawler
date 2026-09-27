@@ -196,3 +196,42 @@ def test_duplicate_url_without_sku_keeps_first() -> None:
     ]
     offers = to_scraped_offers(products, retailer="a", page_url="https://a.ro/p")
     assert [(o.title, o.url) for o in offers] == [("A", "https://a.ro/p")]
+
+
+# Real pages (trimmed) from notino.ro: one Offer per shade, each with its own name/image.
+# Notino has no spider (its Cloudflare setup challenges our HTTP client), but its pages are
+# a good real-world example of multi-variant JSON-LD.
+NOTINO = Path(__file__).parent / "fixtures" / "notino"
+NOTINO_CONCEALER = "https://www.notino.ro/aa-wings-of-color/gentle-nude-concealer-corector-lichid/"
+
+
+def test_variant_offers_keep_own_name_image_and_no_shared_gtin() -> None:
+    offers = to_scraped_offers(
+        extract_products((NOTINO / "concealer_variants.html").read_text(encoding="utf-8")),
+        retailer="notino",
+        page_url=NOTINO_CONCEALER,
+    )
+    assert [(o.title, o.price_bani, o.in_stock) for o in offers] == [
+        ("AA Wings of Color Gentle Nude Concealer culoare 400 Nude 6,2 g", 4200, False),
+        ("AA Wings of Color Gentle Nude Concealer culoare 401 Vanilla 6,2 g", 4200, False),
+        ("AA Wings of Color Gentle Nude Concealer culoare 402 Beige 6,2 g", 3900, True),
+    ]
+    assert [o.url for o in offers] == [
+        f"{NOTINO_CONCEALER}p-16328638/",
+        f"{NOTINO_CONCEALER}p-16328639/",
+        f"{NOTINO_CONCEALER}p-16328640/",
+    ]
+    # The product's single gtin13 belongs to one shade; copying it to all three would
+    # make matching merge different shades.
+    assert {o.ean for o in offers} == {None}
+    assert offers[0].image_url is not None and "5900116089102" in offers[0].image_url
+
+
+def test_single_offer_keeps_product_gtin_and_collapses_nbsp() -> None:
+    [offer] = to_scraped_offers(
+        extract_products((NOTINO / "cicaplast_single.html").read_text(encoding="utf-8")),
+        retailer="notino",
+        page_url="https://www.notino.ro/la-roche-posay/cicaplast-gel-b5/",
+    )
+    assert offer.title == "La Roche-Posay Cicaplast Gel B5 40 ml"  # was "40\xa0ml"
+    assert (offer.price_bani, offer.ean) == (7500, "3337875586269")

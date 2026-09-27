@@ -50,6 +50,8 @@ class JsonLdOffer:
     sku: str | None = None
     gtin: str | None = None
     seller: str | None = None
+    name: str | None = None  # variant name, e.g. "... culoare 402 Beige 6,2 g"
+    image: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,6 +177,8 @@ def _parse_offer(obj: JsonObj, inherited_currency: str | None = None) -> JsonLdO
         sku=_text(obj.get("sku")),
         gtin=_gtin(obj),
         seller=_text(obj.get("seller")),
+        name=_text(obj.get("name")),
+        image=_text(obj.get("image")),
     )
 
 
@@ -237,6 +241,11 @@ def to_scraped_offers(
 
     Variants that share a URL get `#sku=<sku>` appended so each is stored separately.
 
+    A variant's own `name` and `image` (Notino puts shade and size there) win over the
+    product's. The product-level GTIN is only used when the product has a single offer:
+    on a multi-variant page it belongs to one variant, and copying it to the others would
+    merge different shades during matching.
+
     Missing availability is taken as in stock: shops list availability when a product
     can't be bought, and a price without it is normally purchasable. Offers in a currency
     other than RON are skipped.
@@ -244,6 +253,7 @@ def to_scraped_offers(
     scraped: list[ScrapedOffer] = []
     seen_urls: set[str] = set()
     for product in products:
+        product_gtin = product.gtin if len(product.offers) == 1 else None
         for offer in product.offers:
             if offer.currency != "RON":
                 continue
@@ -258,18 +268,19 @@ def to_scraped_offers(
                 if url in seen_urls:
                     continue
             seen_urls.add(url)
-            image = urljoin(page_url, product.image) if product.image else None
+            image_src = offer.image or product.image
+            image = urljoin(page_url, image_src) if image_src else None
             scraped.append(
                 ScrapedOffer(
                     retailer=retailer,
                     url=url,
-                    title=product.name,
+                    title=offer.name or product.name,
                     price_bani=offer.price_bani,
                     old_price_bani=offer.old_price_bani,
                     currency=offer.currency,
                     in_stock=offer.in_stock if offer.in_stock is not None else True,
                     brand=product.brand,
-                    ean=offer.gtin or product.gtin,
+                    ean=offer.gtin or product_gtin,
                     image_url=image,
                     seller_name=offer.seller,
                 )
