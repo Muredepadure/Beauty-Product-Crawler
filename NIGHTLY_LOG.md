@@ -12,6 +12,22 @@ Blockers / questions for owner: <or "none">
 
 ---
 
+## 2026-09-27 — claude/nightly-2026-09-27-P3.9-parfimo — (local session with the owner, not a nightly run)
+Done:
+- P3.1 (partial) retailer audit from a home connection with our own client: Notino and Dr.Max
+  blocked by Cloudflare challenges, Farmacia Tei disallows all generic bots in robots.txt,
+  dm needs JavaScript (Playwright path), Parfimo works. See the table in ROADMAP.md.
+- P3.9 Parfimo spider (JSON-LD + brand from the heading + image from the gallery). Live smoke
+  run: 20 pages, 20 offers, 0 errors, 20 new products matched.
+- JSON-LD extractor: a variant's own `name`/`image` win over the product's; the product GTIN
+  is only used on single-offer products (it was copied to every shade). Titles collapse
+  non-breaking spaces. `Spider.is_wanted_sitemap()` hook to skip image/review/blog sitemaps.
+- Nightly prompt: end the session after the PR; no follow-up check-ins.
+Tests: 626/626 passed, lint ✓, format ✓, mypy ✓ (src, scripts, tests)
+Next: Phase 10 (UI redesign), starting with P10.1. Phase 3 spiders and Phase 9 (data
+sources) are on hold: the owner is deciding between affiliate product feeds and crawling.
+Blockers / questions for owner: still open from 2026-09-26 — `pack_count` column for multipacks.
+
 ## 2026-09-27 — claude/nightly-2026-09-26-P3.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/6
 Done: nothing. Every open roadmap task is P3.x, and P3.1 is still blocked. I added this entry
 to PR #6 instead of opening another empty PR.

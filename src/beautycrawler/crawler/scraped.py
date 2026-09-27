@@ -80,6 +80,12 @@ class ScrapedOffer(BaseModel):
     seller_name: str | None = None  # marketplaces (eMAG)
     scraped_at: Annotated[datetime, AfterValidator(_utc)] = Field(default_factory=_now)
 
+    @field_validator("title", mode="after")
+    @classmethod
+    def _collapse_whitespace(cls, value: str) -> str:
+        # Shops put a non-breaking space (U+00A0) between number and unit: "40<NBSP>ml".
+        return " ".join(value.split())
+
     @field_validator("ean", mode="before")
     @classmethod
     def _clean_ean(cls, value: object) -> str | None:

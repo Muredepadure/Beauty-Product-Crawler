@@ -55,6 +55,11 @@ class Spider(ABC):
         """Whether a sitemap URL is a product page. Override per site."""
         return True
 
+    def is_wanted_sitemap(self, url: str) -> bool:
+        """Whether to fetch this sitemap (root or child). Override to skip image, review
+        or blog sitemaps that never list product pages."""
+        return True
+
     # ------------------------------------------------------------ discovery
 
     async def discover(self, limit: int | None = None) -> AsyncIterator[str]:
@@ -66,7 +71,11 @@ class Spider(ABC):
         stack: list[tuple[str, int]] = [(u, 0) for u in reversed(dict.fromkeys(roots))]
         while stack:
             sitemap_url, depth = stack.pop()
-            if sitemap_url in seen_sitemaps or depth > MAX_SITEMAP_DEPTH:
+            if (
+                sitemap_url in seen_sitemaps
+                or depth > MAX_SITEMAP_DEPTH
+                or not self.is_wanted_sitemap(sitemap_url)
+            ):
                 continue
             seen_sitemaps.add(sitemap_url)
             try:

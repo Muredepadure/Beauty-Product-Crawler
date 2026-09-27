@@ -11,17 +11,22 @@ Candidate "top 10" by traffic and market position. Task P3.1 verifies each one
 
 | # | Retailer | Domain | Type | Status |
 |---|---|---|---|---|
-| 1 | Notino | notino.ro | Beauty e-commerce (market leader online) | to verify |
-| 2 | eMAG | emag.ro | Marketplace | to verify |
-| 3 | Sephora | sephora.ro | Beauty chain | to verify |
-| 4 | Douglas | douglas.ro | Beauty chain | to verify |
-| 5 | Makeup.ro | makeup.ro | Beauty e-commerce | to verify |
-| 6 | dm drogerie markt | dm.ro | Drugstore | to verify |
-| 7 | Farmacia Tei | farmaciatei.ro | Pharmacy (dermocosmetics) | to verify |
-| 8 | Dr.Max | drmax.ro | Pharmacy (dermocosmetics) | to verify |
-| 9 | Parfimo | parfimo.ro | Perfume / cosmetics e-commerce | to verify |
-| 10 | Elefant | elefant.ro | General e-commerce with beauty section | to verify |
-| R | Trendyol, Catena, Esteto, Marionnaud | — | Reserves if any above is blocked | — |
+| 1 | Notino | notino.ro | Beauty e-commerce (market leader online) | **blocked**: robots.txt allows product pages, but Cloudflare answers our HTTP client with a challenge (403, `cf-mitigated: challenge`) — rule 6, no spider |
+| 2 | eMAG | emag.ro | Marketplace | robots.txt readable from a home IP with our client; audit pending |
+| 3 | Sephora | sephora.ro | Beauty chain | robots.txt returned 403 to curl from a home IP; recheck with our client, likely blocked |
+| 4 | Douglas | douglas.ro | Beauty chain | robots.txt returned 403 to curl from a home IP; recheck with our client, likely blocked |
+| 5 | Makeup.ro | makeup.ro | Beauty e-commerce | robots.txt 200 with our client (202 to curl); audit pending |
+| 6 | dm drogerie markt | dm.ro | Drugstore | allowed by robots.txt (sitemap `product-sitemap.xml`, ~11 500 products), but product pages are rendered by JavaScript: the HTML has no product data → needs the optional Playwright path (CLAUDE.md) |
+| 7 | Farmacia Tei | farmaciatei.ro | Pharmacy (dermocosmetics) | **not allowed**: robots.txt has a second `User-agent: *` group with `Disallow: /` (only named search/AI bots allowed) — no spider |
+| 8 | Dr.Max | drmax.ro | Pharmacy (dermocosmetics) | **blocked**: sitemap answers our client with a Cloudflare challenge — rule 6, no spider |
+| 9 | Parfimo | parfimo.ro | Perfume / cosmetics e-commerce | **done** (P3.9): JSON-LD + heading/gallery, ~17 500 products in 7 sitemaps |
+| 10 | Elefant | elefant.ro | General e-commerce with beauty section | robots.txt readable with our client (Cloudflare, no challenge on robots); audit pending |
+| R | Trendyol, Catena, Esteto, Marionnaud | — | Reserves: audit and add to replace blocked stores | — |
+
+Audit notes (2026-09-27, done locally from a home connection because the nightly cloud
+environment had no access yet): "our client" means the project's `PoliteFetcher` (httpx,
+`BeautyCrawler/0.1` user agent). A site that challenges it is blocked even if curl or a
+browser gets through: making our client look like something else is fingerprint evasion.
 
 ## Phase 0 — Foundation
 
@@ -49,20 +54,22 @@ Candidate "top 10" by traffic and market position. Task P3.1 verifies each one
 
 ## Phase 3 — Retailer spiders
 
-- [!] **P3.1** _Blocked 2026-09-25: the nightly cloud environment's network policy denies the retailer domains (proxy CONNECT 403 for notino.ro, emag.ro, sephora.ro, dm.ro). Owner: allow these domains in the environment's Network access settings, or run the audit locally and commit fixtures._ Retailer audit: for each of the 10 retailers, record in this file robots.txt rules for product pages, sitemap availability, whether JSON-LD is present, and whether plain HTTP works. Update the status column. Save one product page per allowed retailer as a fixture (only if the sandbox has network access; otherwise note it and ask the owner to add fixtures).
-- [!] **P3.2** _Blocked on P3.1 (no fixtures / robots.txt check possible yet)._ Spider: Notino
-- [!] **P3.3** _Blocked on P3.1 (no fixtures / robots.txt check possible yet)._ Spider: Sephora
-- [!] **P3.4** _Blocked on P3.1 (no fixtures / robots.txt check possible yet)._ Spider: Douglas
-- [!] **P3.5** _Blocked on P3.1 (no fixtures / robots.txt check possible yet)._ Spider: Makeup.ro
-- [!] **P3.6** _Blocked on P3.1 (no fixtures / robots.txt check possible yet)._ Spider: dm
-- [!] **P3.7** _Blocked on P3.1 (no fixtures / robots.txt check possible yet)._ Spider: Farmacia Tei
-- [!] **P3.8** _Blocked on P3.1 (no fixtures / robots.txt check possible yet)._ Spider: Dr.Max
-- [!] **P3.9** _Blocked on P3.1 (no fixtures / robots.txt check possible yet)._ Spider: Parfimo
-- [!] **P3.10** _Blocked on P3.1 (no fixtures / robots.txt check possible yet)._ Spider: Elefant
-- [!] **P3.11** _Blocked on P3.1 (no fixtures / robots.txt check possible yet)._ Spider: eMAG (marketplace: record seller name per offer)
+- [!] **P3.1** _On hold (owner, 2026-09-27): the data source is being decided (affiliate product feeds vs crawling). Do not start until the owner lifts the hold._ Retailer audit: see the table above (2026-09-27). Still to audit with our client: eMAG, Sephora, Douglas, Makeup.ro, Elefant, then the reserves. For each allowed and reachable site: note robots.txt rules, sitemaps, whether product JSON-LD is present, and save trimmed product pages as fixtures in `tests/fixtures/<retailer>/` (see `tests/fixtures/parfimo/`).
+- [!] **P3.2** _Blocked 2026-09-27: Cloudflare challenges our client (see table). Real Notino pages are kept in `tests/fixtures/notino/` as JSON-LD variant examples._ Spider: Notino
+- [!] **P3.3** _On hold (owner, 2026-09-27): the data source is being decided (affiliate product feeds vs crawling). Do not start until the owner lifts the hold._ Spider: Sephora (after P3.1 recheck; skip and mark `[!]` if blocked)
+- [!] **P3.4** _On hold (owner, 2026-09-27): the data source is being decided (affiliate product feeds vs crawling). Do not start until the owner lifts the hold._ Spider: Douglas (after P3.1 recheck; skip and mark `[!]` if blocked)
+- [!] **P3.5** _On hold (owner, 2026-09-27): the data source is being decided (affiliate product feeds vs crawling). Do not start until the owner lifts the hold._ Spider: Makeup.ro
+- [!] **P3.6** _On hold (owner, 2026-09-27): the data source is being decided (affiliate product feeds vs crawling). Do not start until the owner lifts the hold._ Spider: dm — JavaScript-rendered pages: do this after the plain-HTTP stores, using Playwright behind an optional extra (CLAUDE.md stack table). Tests still run on saved (rendered) fixtures.
+- [!] **P3.7** _Not allowed 2026-09-27: robots.txt disallows `/` for all generic bots._ Spider: Farmacia Tei
+- [!] **P3.8** _Blocked 2026-09-27: Cloudflare challenge on the sitemap._ Spider: Dr.Max
+- [x] **P3.9** Spider: Parfimo (2026-09-27, built and smoke-run locally: 20 pages, 20 offers, 0 errors)
+- [!] **P3.10** _On hold (owner, 2026-09-27): the data source is being decided (affiliate product feeds vs crawling). Do not start until the owner lifts the hold._ Spider: Elefant
+- [!] **P3.11** _On hold (owner, 2026-09-27): the data source is being decided (affiliate product feeds vs crawling). Do not start until the owner lifts the hold._ Spider: eMAG (marketplace: record seller name per offer)
 - [x] **P3.12** Crawl CLI: `python -m beautycrawler.crawler run --retailer notino [--limit N]` and `run --all`; writes to DB via P1.3.
 
 Each spider task: parser + fixture tests + discovery (prefer sitemaps) + a `--limit` smoke path. Skip and mark `[!]` if P3.1 says crawling is not allowed or not possible.
+Use `src/beautycrawler/crawler/spiders/parfimo.py` + `tests/test_spider_parfimo.py` as the template.
+- [!] **P3.13** _On hold (owner, 2026-09-27): the data source is being decided (affiliate product feeds vs crawling). Do not start until the owner lifts the hold._ Reserve spiders (Trendyol, Catena, Esteto, Marionnaud, …) for each blocked store, same audit rules.
 
 ## Phase 4 — Normalization & matching
 
@@ -100,3 +107,30 @@ Each spider task: parser + fixture tests + discovery (prefer sitemaps) + a `--li
 - [x] **P8.1** Dockerfile(s) + `docker-compose.yml` (api, ui, postgres, scheduler).
 - [x] **P8.2** Postgres integration test job in CI (service container).
 - [x] **P8.3** Final README: setup, running crawls, API reference, adding a new retailer.
+
+## Phase 9 — Data sources (on hold, owner)
+
+The owner is deciding how prices get in: affiliate product feeds (2Performant, Profitshare:
+XML/CSV with price, stock, EAN, image) as the main source, crawling as the fallback for
+stores without a feed. Nothing here starts until the owner lifts the hold.
+
+- [!] **P9.1** _On hold (owner)._ Feed importer: read a merchant XML/CSV feed into the same `upsert_offer` path (so matching, history and the UI work unchanged); tested with sample feed files.
+- [!] **P9.2** _On hold (owner)._ Incremental and resumable crawls (sitemap `lastmod`, continue after an interruption).
+
+## Phase 10 — UI redesign (simple, polished)
+
+Goal: a clean, modern, simple look for the Streamlit UI — not new features. Keep the
+Romanian copy, keep every existing page working, and keep `tests/test_ui_app.py` green
+(update it when markup changes). Prefer Streamlit theming (`.streamlit/config.toml`) and a
+small, well-scoped CSS block over heavy custom HTML. Must look right in light and dark mode
+and on a phone-width window. In each PR, describe the visual changes; attach screenshots
+if the environment can take them (e.g. Playwright against a local run with seeded data).
+
+- [ ] **P10.1** Design foundation: theme in `.streamlit/config.toml` (one accent colour suited to beauty, neutral greys, readable font sizes), page title/icon, a slim header with the app name and a one-line tagline, consistent spacing. Collect shared styling in one module (e.g. `ui/style.py`) instead of scattering CSS.
+- [ ] **P10.2** Search results: tidy product cards — fixed-ratio image on a light background, brand in small caps above the name, size, **lowest price** prominent, "la N magazine" (retailer count), badges for "Reducere" (on sale) and "Stoc epuizat" (out of stock); consistent card heights; placeholder image when missing.
+- [ ] **P10.3** Search bar and filters: search field at the top with a clear placeholder, filters in the sidebar grouped and labelled, result count and sort in one row, friendly empty state ("Niciun produs găsit") with a hint.
+- [ ] **P10.4** Product page: header with image, brand, name, size; price comparison table with retailer name, price, old price struck through, stock status, "Vezi în magazin" button; cheapest row highlighted; price-history chart styled to match the theme; back link to results.
+- [ ] **P10.5** Seller view ("Comparație prețuri"): clearer table/heatmap of each retailer vs the market median (green below, red above), short explanation text, same visual language as the other pages.
+- [ ] **P10.6** Polish: loading spinners, error message when the API is down (with the command to start it: `python -m uvicorn beautycrawler.api.main:app --port 8000`, which also works where Windows Smart App Control blocks `uvicorn.exe`), formatted prices ("1.234,50 lei"), favicon, footer with data freshness ("Actualizat la …" = newest `scraped_at`).
+- [ ] **P10.7** Hide demo data: once any retailer has real offers, the seed's demo products without offers no longer appear in search (or add a `--no-demo` seed option); document it.
+

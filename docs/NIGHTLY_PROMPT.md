@@ -44,6 +44,9 @@ the next task. Do not guess at decisions that belong to the owner — record the
    `Nightly <YYYY-MM-DD>: <task ids>`, with: summary per task, test results, anything the owner
    should check manually, and open questions.
 3. Never merge the PR yourself. Never push to `main`. Never force-push a branch someone else pushed to.
+4. When the PR is open and the log is pushed, **end the session**. Do not schedule follow-up
+   check-ins, reminders or PR watching (no `send_later` or similar): the owner reviews in the
+   morning, and the next nightly run picks up review comments.
 
 ## Quality bar
 
