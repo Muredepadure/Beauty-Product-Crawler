@@ -45,6 +45,14 @@ class ProductSort(enum.StrEnum):
     RETAILERS = "retailers"  # most retailers first
 
 
+class Unlisted(enum.StrEnum):
+    """Products without any listing (e.g. the seed's demo products)."""
+
+    SHOW = "show"
+    HIDE = "hide"
+    AUTO = "auto"  # hide them once any product has a listing
+
+
 def search_words(q: str) -> list[str]:
     """Query words, folded; punctuation dropped ("L'Oréal Duo+" -> loreal, duo)."""
     return list(dict.fromkeys(_WORD.findall(fold(q).replace("'", ""))))
@@ -64,6 +72,20 @@ def _offer_stats() -> Subquery:
         .group_by(Offer.product_id)
         .subquery()
     )
+
+
+def _on_sale(session: Session, lowest: dict[int, int]) -> set[int]:
+    """Products whose lowest in-stock price comes with a higher old (pre-sale) price."""
+    if not lowest:
+        return set()
+    offers = session.execute(
+        select(Offer.product_id, Offer.price_bani, Offer.old_price_bani).where(
+            Offer.in_stock,
+            Offer.product_id.in_(lowest),
+            Offer.old_price_bani > Offer.price_bani,
+        )
+    )
+    return {pid for pid, price, _ in offers if pid is not None and price == lowest[pid]}
 
 
 def _categories_matching(session: Session, category: str) -> list[str]:
@@ -90,6 +112,13 @@ def list_products(
     in_stock: Annotated[
         bool, Query(description="Only products at least one retailer has in stock")
     ] = False,
+    unlisted: Annotated[
+        Unlisted,
+        Query(
+            description="Products without listings: show, hide, or auto (hide them as soon "
+            "as any product has a listing, so demo data disappears after the first crawl)"
+        ),
+    ] = Unlisted.SHOW,
     sort: ProductSort = ProductSort.NAME,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 24,
@@ -113,6 +142,11 @@ def list_products(
         conditions.append(stats.c.lowest_price <= max_price)
     if in_stock:
         conditions.append(stats.c.lowest_price.is_not(None))
+    if unlisted is Unlisted.HIDE or (
+        unlisted is Unlisted.AUTO
+        and session.scalar(select(Offer.id).where(Offer.product_id.is_not(None)).limit(1))
+    ):
+        conditions.append(stats.c.offer_count.is_not(None))
 
     base = (
         select(Product, Brand.name.label("brand_name"), stats)
@@ -133,6 +167,10 @@ def list_products(
     rows = session.execute(
         base.order_by(*order, Product.id).limit(page_size).offset((page - 1) * page_size)
     ).all()
+    on_sale = _on_sale(
+        session,
+        {r.Product.id: r.lowest_price for r in rows if r.lowest_price is not None},
+    )
 
     items = [
         ProductSummary(
@@ -148,6 +186,7 @@ def list_products(
             offer_count=row.offer_count or 0,
             retailer_count=row.retailer_count or 0,
             in_stock=bool(row.any_in_stock),
+            on_sale=row.Product.id in on_sale,
         )
         for row in rows
     ]
@@ -190,6 +229,10 @@ def get_product(
         offer_count=len(offers),
         retailer_count=len({o.retailer_id for o in offers}),
         in_stock=lowest is not None,
+        on_sale=any(
+            o.in_stock and o.price_bani == lowest and (o.old_price_bani or 0) > o.price_bani
+            for o in offers
+        ),
         offers=[
             OfferOut(
                 id=o.id,

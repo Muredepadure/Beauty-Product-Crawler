@@ -1,15 +1,21 @@
 """Pure helpers that shape API data for the Streamlit UI (kept out of the Streamlit
 script so they are typed and unit-tested)."""
 
+from collections.abc import Iterable, Mapping
+from datetime import UTC, datetime, tzinfo
 from decimal import Decimal
+from html import escape
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from beautycrawler.api.schemas import (
     BrandComparison,
     ProductDetail,
     ProductHistory,
     ProductSummary,
+    RetailerOut,
 )
-from beautycrawler.ui_client import format_lei
+from beautycrawler.ui_client import ApiError, format_lei
+from beautycrawler.ui_style import ABOVE_MARKET, BELOW_MARKET, GREEN_RGB, RED_RGB
 
 SORT_LABELS: dict[str, str] = {
     "name": "Nume (A-Z)",
@@ -43,19 +49,76 @@ def products_label(count: int) -> str:
     return plural_ro(count, "produs", "produse")
 
 
-def card_price_line(product: ProductSummary) -> str:
-    """E.g. "de la 69,90 lei · 3 magazine", or why there's no price."""
-    stores = stores_label(product.retailer_count)
+PLACEHOLDER_ICON = "💄"
+
+
+def safe_image_url(url: str | None) -> str | None:
+    """Only http(s) image URLs make it into the card markup."""
+    if url and url.lower().startswith(("https://", "http://")):
+        return url
+    return None
+
+
+def card_badges(product: ProductSummary) -> list[str]:
+    badges = []
+    if product.on_sale:
+        badges.append("Reducere")
+    if product.offer_count and not product.in_stock:
+        badges.append("Stoc epuizat")
+    return badges
+
+
+def media_html(product: ProductSummary) -> str:
+    """The product image in a fixed-ratio white box (placeholder when missing), with
+    the card badges on top."""
+    image = safe_image_url(product.image_url)
+    media = (
+        f'<img src="{escape(image)}" alt="{escape(product.name)}" loading="lazy">'
+        if image
+        else f'<span class="bc-card-placeholder" aria-hidden="true">{PLACEHOLDER_ICON}</span>'
+    )
+    badges = "".join(
+        f'<span class="bc-badge bc-badge-{"sale" if b == "Reducere" else "out"}">{b}</span>'
+        for b in card_badges(product)
+    )
+    return f'<div class="bc-card-media">{media}<div class="bc-card-badges">{badges}</div></div>'
+
+
+def price_html(product: ProductSummary) -> str:
+    """The lowest price, large ("de la" only with several listings), or why none."""
     if product.lowest_price_bani is not None:
-        return f"de la {format_lei(product.lowest_price_bani)} · {stores}"
-    if product.offer_count:
-        return f"Stoc epuizat · {stores}"
-    return "Fără oferte încă"
+        price = format_lei(product.lowest_price_bani)
+        if product.offer_count > 1:
+            price = f'<span class="bc-from">de la</span> {price}'
+        return f'<div class="bc-card-price">{price}</div>'
+    missing = "Indisponibil" if product.offer_count else "Fără oferte încă"
+    return f'<div class="bc-card-price bc-muted">{missing}</div>'
 
 
-def card_subtitle(product: ProductSummary) -> str:
-    parts = [product.brand or "", format_size(product.size_value, product.size_unit)]
-    return " · ".join(p for p in parts if p)
+def stores_line(product: ProductSummary) -> str:
+    """ "la 3 magazine", or "" without listings."""
+    return f"la {stores_label(product.retailer_count)}" if product.retailer_count else ""
+
+
+def card_html(product: ProductSummary) -> str:
+    """Search result card (P10.2) as one line of HTML for `st.markdown`.
+
+    Every line is always present (an empty one holds a non-breaking space) and the name
+    is clamped to two lines by CSS, so cards in a row have the same height. Scraped text
+    is escaped. Classes are styled in `ui_style.CSS`.
+    """
+    name = escape(product.name)
+    size = format_size(product.size_value, product.size_unit)
+    return (
+        '<div class="bc-card">'
+        f"{media_html(product)}"
+        f'<div class="bc-card-brand">{escape(product.brand or "") or "&nbsp;"}</div>'
+        f'<div class="bc-card-name" title="{name}">{name}</div>'
+        f'<div class="bc-card-size">{escape(size) or "&nbsp;"}</div>'
+        f"{price_html(product)}"
+        f'<div class="bc-card-stores">{stores_line(product) or "&nbsp;"}</div>'
+        "</div>"
+    )
 
 
 def page_count(total: int, page_size: int) -> int:
@@ -69,26 +132,67 @@ def discount_pct(price_bani: int, old_price_bani: int | None) -> int | None:
     return round((old_price_bani - price_bani) * 100 / old_price_bani)
 
 
-def offer_rows(product: ProductDetail) -> list[dict[str, object]]:
-    """Rows for the product page's price table, in the API's order (best first)."""
-    rows: list[dict[str, object]] = []
+def product_header_html(product: ProductDetail) -> tuple[str, str]:
+    """Product page header (P10.4) around the name, which is an `st.title`: the brand
+    (small caps) above it; size, price summary and store count below it."""
+    brand = escape(product.brand or "")
+    size = escape(format_size(product.size_value, product.size_unit))
+    above = f'<div class="bc-card-brand bc-detail-brand">{brand or "&nbsp;"}</div>'
+    below = (
+        f'<div class="bc-detail-meta">{size or "&nbsp;"}</div>'
+        f"{price_html(product)}"
+        f'<div class="bc-card-stores">{stores_line(product) or "&nbsp;"}</div>'
+    )
+    return above, below
+
+
+def offer_table_html(product: ProductDetail) -> str:
+    """The product page's price table (P10.4) in the API's order (best first).
+
+    Old prices are struck through with the discount next to them, the cheapest in-stock
+    rows are highlighted, and each row links out with a "Vezi în magazin" button (only
+    for http(s) URLs). Scraped text is escaped. Rows stack on a phone (CSS).
+    """
+    rows = []
     for offer in product.offers:
-        store = offer.retailer.name
+        store = escape(offer.retailer.name)
         if offer.seller_name:
-            store += f" (vândut de {offer.seller_name})"
+            store += f'<div class="bc-seller">vândut de {escape(offer.seller_name)}</div>'
+        if offer.is_cheapest:
+            store += '<div class="bc-best">Cel mai mic preț</div>'
+        price = f'<span class="bc-offer-price">{format_lei(offer.price_bani)}</span>'
         discount = discount_pct(offer.price_bani, offer.old_price_bani)
-        rows.append(
-            {
-                "": "🏆" if offer.is_cheapest else "",
-                "Magazin": store,
-                "Preț": format_lei(offer.price_bani),
-                "Preț vechi": format_lei(offer.old_price_bani) if offer.old_price_bani else "",
-                "Reducere": f"-{discount}%" if discount else "",
-                "Stoc": "În stoc" if offer.in_stock else "Stoc epuizat",
-                "Link": offer.url,
-            }
+        if discount and offer.old_price_bani:
+            price += (
+                f' <s class="bc-old-price">{format_lei(offer.old_price_bani)}</s>'
+                f' <span class="bc-discount">-{discount}%</span>'
+            )
+        stock = (
+            '<span class="bc-stock bc-in-stock">În stoc</span>'
+            if offer.in_stock
+            else '<span class="bc-stock bc-out-of-stock">Stoc epuizat</span>'
         )
-    return rows
+        url = safe_image_url(offer.url)  # same rule: http(s) only
+        link = (
+            f'<a class="bc-shop-btn" href="{escape(url)}" target="_blank" '
+            'rel="noopener noreferrer nofollow">Vezi în magazin</a>'
+            if url
+            else ""
+        )
+        row_class = ' class="bc-cheapest"' if offer.is_cheapest else ""
+        rows.append(
+            f"<tr{row_class}>"
+            f'<td class="bc-col-store">{store}</td>'
+            f'<td class="bc-col-price">{price}</td>'
+            f'<td class="bc-col-stock">{stock}</td>'
+            f'<td class="bc-col-link">{link}</td>'
+            "</tr>"
+        )
+    return (
+        '<div class="bc-offers"><table>'
+        "<thead><tr><th>Magazin</th><th>Preț</th><th>Stoc</th><th></th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
+    )
 
 
 def history_rows(history: ProductHistory) -> list[dict[str, object]]:
@@ -108,6 +212,7 @@ def history_rows(history: ProductHistory) -> list[dict[str, object]]:
                     "Magazin": store,
                     "Data": point.scraped_at,
                     "Preț (lei)": point.price_bani / 100 if point.in_stock else None,
+                    "Preț": format_lei(point.price_bani) if point.in_stock else "Stoc epuizat",
                 }
             )
         if series.points and series.last_seen_at > series.points[-1].scraped_at:
@@ -115,6 +220,59 @@ def history_rows(history: ProductHistory) -> list[dict[str, object]]:
             last["Data"] = series.last_seen_at
             rows.append(last)
     return rows
+
+
+# --- P10.6 polish ---------------------------------------------------------------------
+
+START_API_COMMAND = "python -m uvicorn beautycrawler.api.main:app --port 8000"
+
+
+def api_error_message(exc: ApiError, what: str, base_url: str) -> str:
+    """Markdown for a failed API call: how to start the API when it is unreachable,
+    otherwise the error itself. `what` completes "Nu am putut încărca …"."""
+    if exc.status_code is None:
+        return (
+            f"Nu mă pot conecta la API ({base_url}), deci nu am putut încărca {what}. "
+            f"Pornește-l dintr-un terminal, din folderul proiectului:\n\n"
+            f"```\n{START_API_COMMAND}\n```"
+        )
+    return f"Nu am putut încărca {what}: {exc}"
+
+
+def local_zone() -> tzinfo:
+    """Romanian time; UTC where the system has no time zone data."""
+    try:
+        return ZoneInfo("Europe/Bucharest")
+    except ZoneInfoNotFoundError:
+        return UTC
+
+
+def freshness_text(retailers: Iterable[RetailerOut], zone: tzinfo | None = None) -> str:
+    """Footer line from the newest crawl of any listing, e.g. "Actualizat la
+    27.09.2026, 14:05"."""
+    seen = [r.last_seen_at for r in retailers if r.last_seen_at is not None]
+    if not seen:
+        return "Încă nu există prețuri de la magazine."
+    zone = zone or local_zone()
+    newest: datetime = max(seen).astimezone(zone)
+    suffix = " UTC" if zone is UTC else ""
+    return f"Actualizat la {newest:%d.%m.%Y, %H:%M}{suffix}"
+
+
+def active_filter_count(filters: Mapping[str, object]) -> int:
+    """How many search filters are set (`ApiClient.search_products` kwargs; None, False
+    and "" mean "not set")."""
+    # `is` checks: 0 == False, but a 0 bani bound is still a filter.
+    return sum(1 for v in filters.values() if v is not None and v is not False and v != "")
+
+
+def empty_hint(query: str | None, active_filters: int) -> str:
+    """What to try next when a search finds nothing."""
+    if active_filters:
+        return "Încearcă mai puține filtre sau alt termen de căutare."
+    if query and query.strip():
+        return "Verifică ortografia sau caută doar după brand (ex. „CeraVe”)."
+    return "Încă nu există produse în catalog."
 
 
 def lei_to_bani(lei: float | None) -> int | None:
@@ -148,16 +306,52 @@ def market_position(pct_vs_median: float | None, in_stock: bool) -> str:
     return "La nivelul pieței"
 
 
-def position_rows(comparison: BrandComparison) -> list[dict[str, object]]:
-    return [
-        {
-            "Magazin": p.retailer.name,
-            "Produse listate": p.products_listed,
-            "Cel mai ieftin la": p.cheapest_count,
-            "Medie față de median": format_pct(p.avg_vs_median_pct),
-        }
-        for p in comparison.retailers
-    ]
+MARKET_CLASS = {"Sub piață": "bc-below", "Peste piață": "bc-above"}
+
+MARKET_LEGEND_HTML = (
+    '<div class="bc-legend">'
+    '<span class="bc-pill bc-below">Sub mediană: mai ieftin decât piața</span>'
+    f'<span class="bc-pill">La nivelul pieței (±{MARKET_BAND_PCT:.0f}%)</span>'
+    '<span class="bc-pill bc-above">Peste mediană: mai scump</span>'
+    "</div>"
+)
+
+
+def pct_cell_style(value: object) -> str:
+    """Heatmap cell for % vs median: green below, red above, stronger the further from
+    the median (full strength at ±20 %); no colour within the ±2 % band or when empty."""
+    if not isinstance(value, int | float) or value != value:  # NaN
+        return ""
+    if abs(value) <= MARKET_BAND_PCT:
+        return ""
+    alpha = 0.12 + 0.33 * min(abs(value), 20.0) / 20.0
+    rgb = GREEN_RGB if value < 0 else RED_RGB
+    return f"background-color: rgba({rgb}, {alpha:.2f})"
+
+
+def position_style(label: object) -> str:
+    """Cell style for the "Poziție" column of the store detail table."""
+    return {"Sub piață": BELOW_MARKET, "Peste piață": ABOVE_MARKET}.get(str(label), "")
+
+
+def position_cards_html(comparison: BrandComparison) -> str:
+    """One card per retailer: average % vs the median as a coloured pill, and on how many
+    of its listed products it is the cheapest."""
+    cards = []
+    for p in comparison.retailers:
+        label = market_position(p.avg_vs_median_pct, True)
+        css = MARKET_CLASS.get(label, "")
+        pill = f'<span class="bc-pill{" " + css if css else ""}">'
+        listed = plural_ro(p.products_listed, "produs", "produse")
+        cards.append(
+            '<div class="bc-stat">'
+            f'<div class="bc-stat-store">{escape(p.retailer.name)}</div>'
+            f'<div class="bc-stat-value">{pill}{format_pct(p.avg_vs_median_pct)}</span></div>'
+            '<div class="bc-stat-label">față de mediană, în medie</div>'
+            f'<div class="bc-stat-foot">cel mai ieftin la {p.cheapest_count} din {listed}</div>'
+            "</div>"
+        )
+    return f'<div class="bc-stats">{"".join(cards)}</div>'
 
 
 def retailer_rows(comparison: BrandComparison, retailer_slug: str) -> list[dict[str, object]]:

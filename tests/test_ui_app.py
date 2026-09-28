@@ -4,6 +4,8 @@ The UI's HTTP calls are routed (by respx) into the FastAPI test app backed by an
 in-memory database, so these are end-to-end tests without any network.
 """
 
+import html
+import re
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -20,6 +22,7 @@ from streamlit.testing.v1 import AppTest
 from beautycrawler.config import get_settings
 from beautycrawler.db.models import Brand, Product, Retailer
 from beautycrawler.db.repository import OfferSnapshot, upsert_offer
+from beautycrawler.ui_style import TAGLINE
 
 APP = str(Path(__file__).resolve().parents[1] / "ui" / "App.py")
 API_HOST = "ui-api.test"
@@ -95,6 +98,15 @@ def markdown(at: AppTest) -> str:
     return "\n".join(m.value for m in at.markdown)
 
 
+def card_markup(at: AppTest) -> list[str]:
+    return [m.value for m in at.markdown if m.value.startswith('<div class="bc-card">')]
+
+
+def card_names(at: AppTest) -> list[str]:
+    names = (re.search(r'class="bc-card-name"[^>]*>(.*?)</div>', c) for c in card_markup(at))
+    return [html.unescape(m.group(1)) for m in names if m]
+
+
 # --- P7.1: search page -------------------------------------------------------------
 
 
@@ -103,28 +115,84 @@ def test_search_lists_products_as_cards(ui_api: respx.MockRouter, shop: dict[str
     assert not at.exception
     assert at.title[0].value == "🔎 Caută produse"
     assert at.subheader[0].value == "3 produse"
-    text = markdown(at)
-    assert "**Effaclar Duo+**" in text
-    assert "de la 74,50 lei · 2 magazine" in text  # emag's 74,50 beats notino's 79,90
-    assert "Stoc epuizat · 1 magazin" in text
-    assert "La Roche-Posay · 40 ml" in [c.value for c in at.caption]
+    cards = dict(zip(card_names(at), card_markup(at), strict=True))
+    assert list(cards) == ["Cicaplast Baume B5+", "Effaclar Duo+", "Hydrating Cleanser"]
+    duo = cards["Effaclar Duo+"]
+    assert '<div class="bc-card-brand">La Roche-Posay</div>' in duo
+    assert '<div class="bc-card-size">40 ml</div>' in duo
+    # emag's 74,50 beats notino's 79,90
+    assert '<span class="bc-from">de la</span> 74,50 lei' in duo
+    assert '<div class="bc-card-stores">la 2 magazine</div>' in duo
+    assert "bc-badge" not in duo
+    cleanser = cards["Hydrating Cleanser"]
+    assert '<span class="bc-badge bc-badge-out">Stoc epuizat</span>' in cleanser
+    assert '<div class="bc-card-stores">la 1 magazin</div>' in cleanser
+    assert all("bc-card-placeholder" in c for c in cards.values())  # no images
     assert len([b for b in at.button if b.label == "Vezi prețurile"]) == 3
+
+
+def test_header_on_every_page(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    for at in (run_app(), run_app({"product": str(shop["duo"])})):
+        assert not at.exception
+        assert at.markdown[0].value == ":primary[**💄 BeautyCrawler**]"
+        assert at.caption[0].value == TAGLINE
+    at = run_app()
+    at.radio(key="nav").set_value("🏷️ Comparație prețuri").run()
+    assert at.markdown[0].value == ":primary[**💄 BeautyCrawler**]"
 
 
 def test_search_query_filters_cards(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
     at = run_app()
     at.text_input(key="q").input("CICAPLAST Bâume").run()  # case/diacritics ignored
     assert at.subheader[0].value == "1 produs"
-    assert "**Cicaplast Baume B5+**" in markdown(at)
+    assert card_names(at) == ["Cicaplast Baume B5+"]
     at.text_input(key="q").input("nu exista").run()
-    assert "Niciun produs găsit" in at.info[0].value
+    assert "Niciun produs găsit" in markdown(at)
+    assert "Verifică ortografia" in markdown(at)
+    assert not at.subheader  # no "0 produse" above the empty state
+    assert [b.key for b in at.button if b.label == "Resetează filtrele"] == ["reset_filters"]
+
+
+def test_search_hides_demo_products_once_offers_exist(
+    ui_api: respx.MockRouter, shop: dict[str, int], api_session: Session
+) -> None:
+    api_session.add(Product(name="Demo fără oferte", normalized_name="demo fara oferte"))
+    api_session.commit()
+    assert "Demo fără oferte" not in card_names(run_app())
+
+
+def test_search_shows_demo_products_before_the_first_crawl(
+    ui_api: respx.MockRouter, api_session: Session
+) -> None:
+    api_session.add(Product(name="Demo fără oferte", normalized_name="demo fara oferte"))
+    api_session.commit()
+    assert card_names(run_app()) == ["Demo fără oferte"]
+
+
+def test_search_empty_database(ui_api: respx.MockRouter) -> None:
+    at = run_app()
+    assert not at.exception
+    assert "Încă nu există produse în catalog." in markdown(at)
+
+
+def test_reset_filters(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    at = run_app()
+    assert at.button(key="reset_filters").disabled  # nothing to reset
+    at.selectbox(key="brand").select("CeraVe").run()
+    at.checkbox(key="in_stock").check().run()  # CeraVe's only product is out of stock
+    assert "Încearcă mai puține filtre" in markdown(at)
+    assert not at.button(key="reset_filters").disabled
+    at.button(key="reset_filters_empty").click().run()
+    assert at.selectbox(key="brand").value == "Toate brandurile"
+    assert at.checkbox(key="in_stock").value is False
+    assert len(card_names(at)) == 3
+    assert at.button(key="reset_filters").disabled
 
 
 def test_search_sort_by_price(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
     at = run_app()
     at.selectbox(key="sort").select("price_asc").run()
-    names = [m.value for m in at.markdown if m.value.startswith("**")]
-    assert names == ["**Cicaplast Baume B5+**", "**Effaclar Duo+**", "**Hydrating Cleanser**"]
+    assert card_names(at) == ["Cicaplast Baume B5+", "Effaclar Duo+", "Hydrating Cleanser"]
 
 
 def test_search_shows_api_errors(ui_api: respx.MockRouter) -> None:
@@ -132,7 +200,25 @@ def test_search_shows_api_errors(ui_api: respx.MockRouter) -> None:
     ui_api.route(host=API_HOST).mock(side_effect=httpx.ConnectError("refused"))
     at = run_app()
     assert not at.exception
-    assert "Nu am putut încărca produsele" in at.error[0].value
+    message = at.error[0].value
+    assert message.startswith(f"Nu mă pot conecta la API (http://{API_HOST}/api)")
+    assert "python -m uvicorn beautycrawler.api.main:app --port 8000" in message
+    assert "bc-footer" not in markdown(at)  # no freshness without the API
+
+
+def test_api_error_other_than_unreachable(ui_api: respx.MockRouter) -> None:
+    ui_api.routes.clear()
+    ui_api.route(host=API_HOST).mock(return_value=httpx.Response(500, text="boom"))
+    at = run_app()
+    assert at.error[0].value == "Nu am putut încărca produsele: API error 500: boom"
+
+
+def test_footer_shows_data_freshness(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    for at in (run_app(), run_app({"product": str(shop["duo"])})):
+        [footer] = [m.value for m in at.markdown if 'class="bc-footer"' in m.value]
+        assert re.fullmatch(
+            r'<div class="bc-footer">Actualizat la \d\d\.\d\d\.\d{4}, \d\d:\d\d</div>', footer
+        )
 
 
 def test_card_button_opens_product_page(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
@@ -162,17 +248,29 @@ def _chart_specs(at: AppTest) -> list[str]:
     return [e.proto.spec for e in at.main if getattr(e, "type", "") == "vega_lite_chart"]
 
 
+def offer_table(at: AppTest) -> str:
+    [table] = [m.value for m in at.markdown if m.value.startswith('<div class="bc-offers">')]
+    return table
+
+
 def test_product_page_price_table(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
     at = run_app({"product": str(shop["duo"])})
     assert not at.exception
     assert at.title[0].value == "Effaclar Duo+"
-    assert "de la 74,50 lei · 2 magazine" in markdown(at)
-    table = at.dataframe[0].value
-    assert list(table["Magazin"]) == ["eMAG", "Notino"]  # cheapest first
-    assert list(table[""]) == ["🏆", ""]
-    assert list(table["Preț"]) == ["74,50 lei", "79,90 lei"]
-    assert list(table["Stoc"]) == ["În stoc", "În stoc"]
-    assert list(table["Link"]) == ["https://emag.ro/duo", "https://notino.ro/duo"]
+    header = markdown(at)
+    assert '<div class="bc-card-brand bc-detail-brand">La Roche-Posay</div>' in header
+    assert '<div class="bc-detail-meta">40 ml</div>' in header
+    assert '<span class="bc-from">de la</span> 74,50 lei' in header
+    assert '<div class="bc-card-stores">la 2 magazine</div>' in header
+    table = offer_table(at)
+    rows = re.findall(r"<tr[ >].*?</tr>", table.split("<tbody>")[1])
+    assert [re.findall(r'bc-col-store">([^<]*)', r) for r in rows] == [["eMAG"], ["Notino"]]
+    assert rows[0].startswith('<tr class="bc-cheapest">')  # emag's 74,50 beats 79,90
+    assert "Cel mai mic preț" in rows[0] and "Cel mai mic preț" not in rows[1]
+    assert "74,50 lei" in rows[0] and "79,90 lei" in rows[1]
+    assert all("În stoc" in r for r in rows)
+    assert 'href="https://emag.ro/duo"' in rows[0] and 'href="https://notino.ro/duo"' in rows[1]
+    assert table.count("Vezi în magazin") == 2
 
 
 def test_product_page_history_chart(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
@@ -187,9 +285,10 @@ def test_product_page_history_chart(ui_api: respx.MockRouter, shop: dict[str, in
 
 def test_product_page_out_of_stock_only(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
     at = run_app({"product": str(shop["cleanser"])})
-    assert "Stoc epuizat · 1 magazin" in markdown(at)
-    table = at.dataframe[0].value
-    assert (list(table["Stoc"]), list(table[""])) == (["Stoc epuizat"], [""])
+    assert '<div class="bc-card-price bc-muted">Indisponibil</div>' in markdown(at)
+    assert "Stoc epuizat" in markdown(at)  # the badge on the image
+    table = offer_table(at)
+    assert "bc-out-of-stock" in table and "bc-cheapest" not in table
 
 
 def test_product_page_without_offers(ui_api: respx.MockRouter, api_session: Session) -> None:
@@ -204,10 +303,6 @@ def test_product_page_without_offers(ui_api: respx.MockRouter, api_session: Sess
 
 
 # --- P7.3: filters ---------------------------------------------------------------------
-
-
-def card_names(at: AppTest) -> list[str]:
-    return [m.value.strip("*") for m in at.markdown if m.value.startswith("**")]
 
 
 def test_brand_filter(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
@@ -253,14 +348,17 @@ def test_competitor_view(ui_api: respx.MockRouter, shop: dict[str, int]) -> None
     at = open_competitors()
     assert at.title[0].value == "🏷️ Comparație prețuri"
     at.selectbox(key="cmp_brand").select("La Roche-Posay").run()
-    positions, matrix, detail = (d.value for d in at.dataframe)
+    matrix, detail = (d.value for d in at.dataframe)
 
     # duo: emag 74,50 / notino 79,90 -> median 77,20; cica: notino 55 / emag 65 -> median 60
-    assert list(positions["Magazin"]) == ["eMAG", "Notino"]
-    assert list(positions["Cel mai ieftin la"]) == [1, 1]
+    [cards] = [m.value for m in at.markdown if m.value.startswith('<div class="bc-stats">')]
+    stores = re.findall(r'bc-stat-store">([^<]*)', cards)
+    assert stores == ["eMAG", "Notino"]
+    assert cards.count("cel mai ieftin la 1 din 2 produse") == 2
+    assert "bc-legend" in markdown(at)
     assert list(matrix["Produs"]) == ["Cicaplast Baume B5+", "Effaclar Duo+"]
-    assert list(matrix["eMAG"]) == [8.3, -3.5]
-    assert list(matrix["Notino"]) == [-8.3, 3.5]
+    assert list(matrix["eMAG"]) == ["+8,3%", "-3,5%"]
+    assert list(matrix["Notino"]) == ["-8,3%", "+3,5%"]
 
     assert at.selectbox(key="cmp_store").value == "eMAG"
     assert list(detail["Produs"]) == ["Cicaplast Baume B5+", "Effaclar Duo+"]
@@ -270,15 +368,31 @@ def test_competitor_view(ui_api: respx.MockRouter, shop: dict[str, int]) -> None
     assert "**eMAG**: 1 sub piață, 1 peste piață, din 2 listate." in markdown(at)
 
     at.selectbox(key="cmp_store").select("Notino").run()
-    assert list(at.dataframe[2].value["Poziție"]) == ["Sub piață", "Peste piață"]
+    assert list(at.dataframe[1].value["Poziție"]) == ["Sub piață", "Peste piață"]
 
 
 def test_competitor_view_out_of_stock_brand(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
     at = open_competitors()
     at.selectbox(key="cmp_brand").select("CeraVe").run()
-    detail = at.dataframe[2].value
+    detail = at.dataframe[1].value
     assert list(detail["Poziție"]) == ["Stoc epuizat"]
     assert list(detail["Median piață"]) == ["—"]
+
+
+def test_competitor_matrix_marks_unlisted_cells(
+    ui_api: respx.MockRouter, shop: dict[str, int], api_session: Session
+) -> None:
+    sephora = Retailer(slug="sephora", name="Sephora", domain="sephora.ro")
+    duo = api_session.get(Product, shop["duo"])
+    assert duo is not None
+    _observe(api_session, sephora, duo, "https://sephora.ro/duo", [(1, 9_000, True)])
+    api_session.commit()
+    at = open_competitors()
+    at.selectbox(key="cmp_brand").select("La Roche-Posay").run()
+    matrix = at.dataframe[0].value
+    assert list(matrix["Produs"]) == ["Cicaplast Baume B5+", "Effaclar Duo+"]
+    assert matrix["Sephora"][0] == "—"  # Sephora doesn't list Cicaplast
+    assert matrix["Sephora"][1].startswith("+")
 
 
 def test_competitor_view_without_brands(ui_api: respx.MockRouter) -> None:

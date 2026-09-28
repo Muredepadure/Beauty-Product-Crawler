@@ -12,6 +12,37 @@ Blockers / questions for owner: <or "none">
 
 ---
 
+## 2026-09-28 — claude/nightly-2026-09-27-P10.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/8
+Done: nothing. Every open roadmap task (P3.x, P9.x) is on hold for the owner's data-source decision,
+and PR #8 has no review comments yet. I added this entry to PR #8 instead of opening an empty PR.
+Tests: not re-run (no code changes). CI on PR #8's head is green (checks + postgres), mergeable.
+Next: review and merge PR #8; then whatever the owner unblocks (P9.1 feed importer or P3.x spiders).
+Blockers / questions for owner:
+- Lift the P3/P9 hold (affiliate feeds vs crawling), or pause the nightly schedule until then.
+- Still open from PR #8: hide demo brands in the sidebar after the first crawl? `pack_count` for multipacks?
+
+## 2026-09-27 (nightly) — claude/nightly-2026-09-27-P10.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/8
+Done (all of Phase 10, the UI redesign):
+- P10.1 theme (.streamlit/config.toml, rose accent, light + dark), shared `ui_style.py`, slim header.
+- P10.2 search cards: fixed-ratio image, placeholder, small-caps brand, big price, "la N magazine",
+  badges "Reducere"/"Stoc epuizat", equal heights. API: `on_sale` on product summaries.
+- P10.3 search bar with icon, grouped sidebar filters + reset, count and sort on one row, empty state.
+- P10.4 product page: header, HTML price table (old price struck through, "Vezi în magazin",
+  cheapest highlighted, stacks on a phone), themed chart, back link.
+- P10.5 seller view: explanation + legend, retailer cards, graded heatmap (fixed "None" cells).
+- P10.6 API-down message with the start command, spinners, favicon, "Actualizat la …" footer
+  (API: `last_seen_at` on /api/retailers).
+- P10.7 `unlisted=auto` on /api/products: demo products vanish from search after the first crawl.
+Screenshots (light/dark, desktop/phone) in docs/screenshots/p10.*/.
+Tests: 681/681 passed, lint ✓, format ✓, mypy ✓ (src, scripts, tests)
+Next: nothing unblocked. Every remaining task (P3.x spiders, P9.x data sources) is on hold for the
+owner's data-source decision.
+Blockers / questions for owner:
+- Lift the P3/P9 hold (affiliate feeds vs crawling) so nightly runs have work again.
+- The sidebar brand list still includes demo brands after the first crawl (only products are hidden).
+  Hide brands without listed products too?
+- Still open from 2026-09-26: `pack_count` column for multipacks.
+
 ## 2026-09-27 — claude/nightly-2026-09-27-P3.9-parfimo — (local session with the owner, not a nightly run)
 Done:
 - P3.1 (partial) retailer audit from a home connection with our own client: Notino and Dr.Max

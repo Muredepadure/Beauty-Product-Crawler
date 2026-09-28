@@ -31,6 +31,9 @@ class ProductSummary(BaseModel):
     offer_count: int = Field(description="Listings linked to this product")
     retailer_count: int = Field(description="Distinct retailers with a listing")
     in_stock: bool = Field(description="At least one listing is in stock")
+    on_sale: bool = Field(
+        False, description="A listing at the lowest in-stock price shows a higher old price"
+    )
 
 
 class ProductPage(BaseModel):
@@ -98,6 +101,9 @@ class RetailerOut(BaseModel):
     is_active: bool
     offer_count: int = Field(description="Listings stored for this retailer")
     product_count: int = Field(description="Distinct matched products with a listing")
+    last_seen_at: UtcDatetime | None = Field(
+        None, description="Newest crawl of any of its listings (null: never crawled)"
+    )
 
 
 class BrandOut(BaseModel):

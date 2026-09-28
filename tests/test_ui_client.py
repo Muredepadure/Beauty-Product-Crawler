@@ -139,3 +139,12 @@ def test_base_url_from_settings(monkeypatch: pytest.MonkeyPatch) -> None:
 )
 def test_format_lei(bani: int | None, text: str) -> None:
     assert format_lei(bani) == text
+
+
+def test_unlisted_mode_is_passed_through(
+    api: ApiClient, product_id: int, api_session: Session
+) -> None:
+    api_session.add(Product(name="Demo", normalized_name="demo"))
+    api_session.commit()
+    assert api.search_products().total == 2  # default "show" is not even sent
+    assert api.search_products(unlisted="auto").total == 1

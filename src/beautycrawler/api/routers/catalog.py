@@ -27,13 +27,14 @@ def list_retailers(
             Offer.retailer_id,
             func.count(Offer.id).label("offer_count"),
             func.count(func.distinct(Offer.product_id)).label("product_count"),
+            func.max(Offer.last_seen_at).label("last_seen_at"),
         )
         .group_by(Offer.retailer_id)
         .subquery()
     )
-    query = select(Retailer, stats.c.offer_count, stats.c.product_count).outerjoin(
-        stats, stats.c.retailer_id == Retailer.id
-    )
+    query = select(
+        Retailer, stats.c.offer_count, stats.c.product_count, stats.c.last_seen_at
+    ).outerjoin(stats, stats.c.retailer_id == Retailer.id)
     if active is not None:
         query = query.where(Retailer.is_active.is_(active))
     rows = session.execute(query.order_by(func.lower(Retailer.name), Retailer.id)).all()
@@ -45,6 +46,7 @@ def list_retailers(
             is_active=r.Retailer.is_active,
             offer_count=r.offer_count or 0,
             product_count=r.product_count or 0,  # COUNT(DISTINCT) skips unmatched offers
+            last_seen_at=r.last_seen_at,
         )
         for r in rows
     ]
