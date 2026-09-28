@@ -116,6 +116,7 @@ stores without a feed. Nothing here starts until the owner lifts the hold.
 
 - [!] **P9.1** _On hold (owner)._ Feed importer: read a merchant XML/CSV feed into the same `upsert_offer` path (so matching, history and the UI work unchanged); tested with sample feed files.
 - [!] **P9.2** _On hold (owner)._ Incremental and resumable crawls (sitemap `lastmod`, continue after an interruption).
+- [!] **P9.3** _Deferred (owner, 2026-09-28: "wait")._ `pack_count` on Product/Offer so multipacks ("2 x 50 ml") can be matched; revisit once there is multi-store data.
 
 ## Phase 10 — UI redesign (simple, polished)
 

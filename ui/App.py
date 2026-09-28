@@ -131,7 +131,7 @@ FILTER_DEFAULTS: dict[str, object] = {
 @st.cache_data(ttl=600)
 def brand_names() -> list[str]:
     try:
-        return [b.name for b in get_client().list_brands(page_size=200).items]
+        return [b.name for b in get_client().list_brands(page_size=200, unlisted="auto").items]
     except ApiError:
         return []
 
