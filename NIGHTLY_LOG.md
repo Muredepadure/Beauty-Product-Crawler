@@ -12,6 +12,15 @@ Blockers / questions for owner: <or "none">
 
 ---
 
+## 2026-09-28 — claude/nightly-2026-09-27-P10.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/8
+Done: nothing. Every open roadmap task (P3.x, P9.x) is on hold for the owner's data-source decision,
+and PR #8 has no review comments yet. I added this entry to PR #8 instead of opening an empty PR.
+Tests: not re-run (no code changes). CI on PR #8's head is green (checks + postgres), mergeable.
+Next: review and merge PR #8; then whatever the owner unblocks (P9.1 feed importer or P3.x spiders).
+Blockers / questions for owner:
+- Lift the P3/P9 hold (affiliate feeds vs crawling), or pause the nightly schedule until then.
+- Still open from PR #8: hide demo brands in the sidebar after the first crawl? `pack_count` for multipacks?
+
 ## 2026-09-27 (nightly) — claude/nightly-2026-09-27-P10.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/8
 Done (all of Phase 10, the UI redesign):
 - P10.1 theme (.streamlit/config.toml, rose accent, light + dark), shared `ui_style.py`, slim header.
