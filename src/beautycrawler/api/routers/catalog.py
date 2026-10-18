@@ -7,7 +7,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from beautycrawler.api.deps import get_session
-from beautycrawler.api.routers.products import search_words
+from beautycrawler.api.routers.products import Unlisted, hide_unlisted, search_words
 from beautycrawler.api.schemas import BrandOut, BrandPage, RetailerOut
 from beautycrawler.db.models import Brand, Offer, Product, Retailer
 
@@ -58,19 +58,40 @@ def list_brands(
     q: Annotated[str | None, Query(description="Words to find in the brand name")] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=200)] = 50,
+    unlisted: Annotated[
+        Unlisted,
+        Query(
+            description="Brands without listed products: show, hide, or auto (hide them as "
+            "soon as any product has a listing, like /api/products)"
+        ),
+    ] = Unlisted.SHOW,
 ) -> BrandPage:
-    """Brands by name, with how many products each has."""
-    counts = (
-        select(Product.brand_id, func.count(Product.id).label("product_count"))
-        .group_by(Product.brand_id)
-        .subquery()
-    )
+    """Brands by name, with how many products each has.
+
+    When unlisted brands are hidden, `product_count` counts only listed products.
+    """
     conditions = [Brand.normalized_name.like(f"%{w}%") for w in search_words(q or "")]
-    base = (
-        select(Brand, counts.c.product_count)
-        .outerjoin(counts, counts.c.brand_id == Brand.id)
-        .where(and_(True, *conditions))
-    )
+    if hide_unlisted(session, unlisted):
+        counts = (
+            select(
+                Product.brand_id,
+                func.count(func.distinct(Product.id)).label("product_count"),
+            )
+            .join(Offer, Offer.product_id == Product.id)
+            .group_by(Product.brand_id)
+            .subquery()
+        )
+        base = select(Brand, counts.c.product_count).join(counts, counts.c.brand_id == Brand.id)
+    else:
+        counts = (
+            select(Product.brand_id, func.count(Product.id).label("product_count"))
+            .group_by(Product.brand_id)
+            .subquery()
+        )
+        base = select(Brand, counts.c.product_count).outerjoin(
+            counts, counts.c.brand_id == Brand.id
+        )
+    base = base.where(and_(True, *conditions))
     total = session.scalar(select(func.count()).select_from(base.subquery())) or 0
     rows = session.execute(
         base.order_by(Brand.normalized_name, Brand.id)
