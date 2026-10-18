@@ -21,9 +21,9 @@ def count(session: Session, model: type) -> int:
 
 def test_seed_populates_retailers_and_demo(session: Session) -> None:
     result = seed(session)
-    assert result.retailers_added == len(RETAILERS) == 11
+    assert result.retailers_added == len(RETAILERS) == 13
     assert result.products_added == len(DEMO_PRODUCTS)
-    assert count(session, Retailer) == 11
+    assert count(session, Retailer) == 13
     assert count(session, Product) == len(DEMO_PRODUCTS)
     # Brands deduplicated by folded name (La Roche-Posay appears twice).
     assert count(session, Brand) == len({b for b, *_ in DEMO_PRODUCTS})
@@ -37,14 +37,14 @@ def test_seed_is_idempotent(session: Session) -> None:
     seed(session)
     again = seed(session)
     assert (again.retailers_added, again.brands_added, again.products_added) == (0, 0, 0)
-    assert count(session, Retailer) == 11
+    assert count(session, Retailer) == 13
 
 
 def test_seed_keeps_existing_rows(session: Session) -> None:
     session.add(Retailer(slug="notino", name="Notino (custom)", domain="notino.ro"))
     session.commit()
     result = seed(session, demo=False)
-    assert result.retailers_added == 10
+    assert result.retailers_added == 12
     assert result.products_added == 0
     notino = session.scalars(select(Retailer).where(Retailer.slug == "notino")).one()
     assert notino.name == "Notino (custom)"
@@ -74,11 +74,11 @@ def test_seed_script_against_migrated_db(
 
     script = load_script()
     assert script.main(["--database-url", url]) == 0
-    assert "11 retailers" in capsys.readouterr().out
+    assert "13 retailers" in capsys.readouterr().out
     assert script.main(["--database-url", url]) == 0
     assert "0 retailers, 0 brands, 0 products" in capsys.readouterr().out
 
     engine = make_engine(url)
     with make_session_factory(engine)() as s:
-        assert count(s, Retailer) == 11
+        assert count(s, Retailer) == 13
     engine.dispose()
