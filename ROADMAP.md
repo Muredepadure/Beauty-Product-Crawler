@@ -135,3 +135,33 @@ if the environment can take them (e.g. Playwright against a local run with seede
 - [x] **P10.6** Polish: loading spinners, error message when the API is down (with the command to start it: `python -m uvicorn beautycrawler.api.main:app --port 8000`, which also works where Windows Smart App Control blocks `uvicorn.exe`), formatted prices ("1.234,50 lei"), favicon, footer with data freshness ("Actualizat la …" = newest `scraped_at`).
 - [x] **P10.7** Hide demo data: once any retailer has real offers, the seed's demo products without offers no longer appear in search (or add a `--no-demo` seed option); document it.
 
+## Phase 11 — Owner's priority shops (2026-10-18)
+
+The owner's list of shops to cover. Audited on 2026-10-18 from a home connection with our
+client (`PoliteFetcher`, `BeautyCrawler/0.1` user agent). This phase is **not** on hold:
+work it top to bottom. The P3/P9 hold still applies to everything else.
+
+| Shop | Domain | Audit result |
+|---|---|---|
+| **Profihairshop** (owner's #1) | profihairshop.ro → www.profihairshop.ro | ✅ robots.txt allows all, **`Crawl-delay: 10`** (the fetcher must honour it: ~3.6 h for a full crawl). Sitemap index `/sitemap-index.xml` → `products-sitemap.xml` (~1 300 products; skip pages/categories/brands sitemaps). Complete `Product` JSON-LD: name, price, availability, GTIN, brand, image. |
+| ProBeauty | probeauty.ro | ✅ Shopify. robots.txt allows `/products/*`. `/sitemap.xml` → `sitemap_products_<n>.xml`. Complete `Product` JSON-LD. |
+| Beauty Lounge | beauty-lounge.ro | ✅ Shopify, same layout as ProBeauty (7 product sitemaps). JSON-LD has sale prices (old price) — but the JSON-LD name can be cut short ("…Deteriora"): prefer the `<h1>` when it is longer. |
+| Esteto | www.esteto.ro | ✅ robots.txt allows product pages (`/produse-<id>-<slug>`). **No sitemap** (404): discover through category pages linked from the home page. Complete `Product` JSON-LD (GTIN often missing). |
+| XpertBeauty | www.xpertbeauty.ro | ✅ robots.txt: the `*` group only blocks filter URLs. Sitemaps `/sitemap/sitemap-1-{1,2,3}.xml` mix categories and products (products are single-segment paths). **No Product JSON-LD**: custom parser — `product:price:amount` meta, an inline JSON object with `"price"`, `"brand"`, `"availability"`, and `data-price-amount` / `data-price-type="oldPrice"` for the old price. |
+| Citrika | www.citrika.ro | ❌ **Blocked**: Cloudflare challenge (403, `cf-mitigated: challenge`) on the home page and sitemaps — rule 6, no spider. |
+| Farmacia Tei | comenzi.farmaciatei.ro | ❌ **Not allowed**: robots.txt `User-agent: *` → `Disallow: /` (only named search/AI bots allowed). Do not impersonate an allowed bot. |
+| Bebe Tei | comenzi.bebetei.ro | ❌ **Not allowed**: same robots.txt policy as Farmacia Tei. |
+
+Trimmed real pages (reviews removed) are in `tests/fixtures/<shop>/`, so every spider can be
+built and tested without network access. Use `spiders/parfimo.py` + `tests/test_spider_parfimo.py`
+as the template. Each task: add the retailer to `RETAILERS` in `db/seed.py` (and the table at
+the top of this file), spider + fixture tests + discovery test with mocked HTTP; if the cloud
+environment can reach the shop, finish with a polite live smoke run (`--limit 10`) and report
+the numbers in the PR; if it can't, say so in the PR and leave the live run to the owner.
+
+- [ ] **P11.1** Spider: **Profihairshop** (priority). Fixtures: `tests/fixtures/profihairshop/` (gift set, hair dye). Make sure `Crawl-delay: 10` is honoured (add a test if the fetcher lacks one) and that `profihairshop.ro` → `www.` redirects work for robots.txt and sitemaps.
+- [ ] **P11.2** Shared `ShopifySpider` base (sitemap_products_N discovery, `/products/<handle>` URLs, JSON-LD parse, `<h1>` title fallback) + spiders **ProBeauty** and **Beauty Lounge**. Fixtures: `tests/fixtures/probeauty/`, `tests/fixtures/beautylounge/`.
+- [ ] **P11.3** Spider: **Esteto** with category-page discovery (no sitemap). Fixtures: `tests/fixtures/esteto/` (product page + the home page's links). Keep discovery polite: only category listing pages and their pagination, respect robots.txt.
+- [ ] **P11.4** Spider: **XpertBeauty** with a custom parser (no Product JSON-LD). Fixture: `tests/fixtures/xpertbeauty/guinot_mask.html` (59,20 lei, old price 74 lei, brand Guinot, in stock). Filter sitemap URLs to product pages.
+- [ ] **P11.5** Record the blocked/not-allowed shops (Citrika, Farmacia Tei, Bebe Tei) in the retailer table at the top; no spiders.
+
