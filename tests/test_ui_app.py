@@ -224,7 +224,8 @@ def test_footer_shows_data_freshness(ui_api: respx.MockRouter, shop: dict[str, i
 def test_card_button_opens_product_page(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
     at = run_app()
     at.button(key=f"open-{shop['duo']}").click().run()
-    assert at.query_params["product"] == [str(shop["duo"])]
+    # AppTest gives ["1"] on older Streamlit releases and "1" on 1.66.
+    assert at.query_params["product"] in ([str(shop["duo"])], str(shop["duo"]))
     assert at.title[0].value == "Effaclar Duo+"
     at.button[0].click().run()  # back
     assert "product" not in at.query_params
