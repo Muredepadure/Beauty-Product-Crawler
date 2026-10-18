@@ -12,7 +12,7 @@ Blockers / questions for owner: <or "none">
 
 ---
 
-## 2026-10-18 (nightly) — claude/nightly-2026-10-18-P11.1 — PR (see "Nightly 2026-10-18" PR, builds on #9)
+## 2026-10-18 (nightly) — claude/nightly-2026-10-18-P11.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/10 (builds on #9)
 Done:
 - CI fix: selectolax 1.0 removed `selectolax.parser.HTMLParser` (PR #9 was red on mypy); switched
   to the lexbor parser. Streamlit 1.66 AppTest returns query params as strings; UI test accepts both.
