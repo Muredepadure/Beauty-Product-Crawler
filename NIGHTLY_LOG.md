@@ -12,6 +12,27 @@ Blockers / questions for owner: <or "none">
 
 ---
 
+## 2026-10-18 (nightly) — claude/nightly-2026-10-18-P11.1 — PR (see "Nightly 2026-10-18" PR, builds on #9)
+Done:
+- CI fix: selectolax 1.0 removed `selectolax.parser.HTMLParser` (PR #9 was red on mypy); switched
+  to the lexbor parser. Streamlit 1.66 AppTest returns query params as strings; UI test accepts both.
+- P11.1 Profihairshop spider (JSON-LD, products sitemap only; Crawl-delay 10 and apex→www tested).
+- P11.2 `ShopifySpider` base + ProBeauty and Beauty Lounge (h1 completes cut-short names).
+- P11.3 Esteto spider: walks `/produse-cosmetice` and `/parfumuri` listings (subcategories,
+  `?page=N`), no sort/filter URLs, capped.
+- P11.4 XpertBeauty spider: custom parser (analytics block, price boxes, EAN from JSON-LD mpn).
+- P11.5 Citrika (blocked), Farmacia Tei and Bebe Tei (not allowed) recorded; all shops seeded (17).
+- P2.6 (new, found during P11.3): robots.txt matching per RFC 9309; `urllib.robotparser` ignored
+  `*`/`$` wildcards and every `User-agent: *` group after the first.
+Tests: 800/800 passed, lint ✓, format ✓, mypy ✓ (src, scripts, tests)
+Next: owner's live smoke runs of the five new spiders; then whatever the owner unblocks (P3/P9 hold).
+Blockers / questions for owner:
+- The cloud environment can't reach any of the shops (proxy refuses the connection), so no live
+  smoke runs: please run `python -m beautycrawler.crawler run --retailer <slug> --limit 10` for
+  profihairshop, probeauty, beautylounge, esteto, xpertbeauty, or allow the domains.
+- Esteto: are `/produse-cosmetice` and `/parfumuri` the right categories? Pagination format guessed.
+- Profihairshop's Crawl-delay makes a full crawl ~3.6 h; `run --all` runs retailers one after another.
+
 ## 2026-10-18 — claude/nightly-2026-10-18-P11-new-shops — (local session with the owner, not a nightly run)
 Done:
 - Carried over from PR #8 (merged before they were pushed): hide brands without listed products
