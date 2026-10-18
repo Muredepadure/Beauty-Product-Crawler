@@ -58,6 +58,7 @@ browser gets through: making our client look like something else is fingerprint 
 - [x] **P2.3** Romanian price parser: "1.234,99 lei", "49,90 RON", "de la 30 lei", old/new price pairs; exhaustive unit tests.
 - [x] **P2.4** Polite HTTP fetcher: robots.txt check (cached), per-domain rate limit, retries with backoff, custom UA, timeout. Tested with `respx`.
 - [x] **P2.5** `Spider` base interface: `discover()` (category/listing/sitemap → product URLs) and `parse_product(html, url) -> ScrapedOffer`.
+- [x] **P2.6** _(Added and done by the 2026-10-18 nightly run, found while building P11.3.)_ RFC 9309 robots.txt matching (`crawler/robots.py`): `urllib.robotparser` ignored `*`/`$` wildcards (e.g. `Disallow: /*?sort=`) and every `User-agent: *` group after the first, so such rules were not respected.
 
 ## Phase 3 — Retailer spiders
 
