@@ -26,6 +26,7 @@ RETAILERS: tuple[tuple[str, str, str], ...] = (
     ("drmax", "Dr.Max", "drmax.ro"),
     ("parfimo", "Parfimo", "parfimo.ro"),
     ("elefant", "Elefant", "elefant.ro"),
+    ("profihairshop", "Profihairshop", "profihairshop.ro"),
 )
 
 # (brand, product name, size, unit, category)

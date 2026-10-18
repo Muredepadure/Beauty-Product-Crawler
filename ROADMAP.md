@@ -21,6 +21,7 @@ Candidate "top 10" by traffic and market position. Task P3.1 verifies each one
 | 8 | Dr.Max | drmax.ro | Pharmacy (dermocosmetics) | **blocked**: sitemap answers our client with a Cloudflare challenge — rule 6, no spider |
 | 9 | Parfimo | parfimo.ro | Perfume / cosmetics e-commerce | **done** (P3.9): JSON-LD + heading/gallery, ~17 500 products in 7 sitemaps |
 | 10 | Elefant | elefant.ro | General e-commerce with beauty section | **feasible with a custom parser**: robots.txt allows product pages; plain HTTP works; no JSON-LD, but the page's GTM data block has name, price (RON), brand and category (stock/old price from the HTML). Sitemaps list all products (books, watches, …): filter by category |
+| 11 | Profihairshop | profihairshop.ro | Professional hair & body care (owner's priority) | **done** (P11.1): JSON-LD, ~1 300 products in `products-sitemap.xml`, `Crawl-delay: 10`. Live smoke run pending (owner) |
 | R | Trendyol, Catena, Esteto, Marionnaud | — | Reserves: audit and add to replace blocked stores | — |
 
 Audit notes (2026-09-27 and 2026-09-29, done locally from a home connection because the nightly cloud
@@ -159,7 +160,7 @@ the top of this file), spider + fixture tests + discovery test with mocked HTTP;
 environment can reach the shop, finish with a polite live smoke run (`--limit 10`) and report
 the numbers in the PR; if it can't, say so in the PR and leave the live run to the owner.
 
-- [ ] **P11.1** Spider: **Profihairshop** (priority). Fixtures: `tests/fixtures/profihairshop/` (gift set, hair dye). Make sure `Crawl-delay: 10` is honoured (add a test if the fetcher lacks one) and that `profihairshop.ro` → `www.` redirects work for robots.txt and sitemaps.
+- [x] **P11.1** _(2026-10-18 nightly: spider + fixture/discovery tests; Crawl-delay and apex→www redirects tested. The cloud environment cannot reach the shop, so the live `--limit 10` smoke run is left to the owner.)_ Spider: **Profihairshop** (priority). Fixtures: `tests/fixtures/profihairshop/` (gift set, hair dye). Make sure `Crawl-delay: 10` is honoured (add a test if the fetcher lacks one) and that `profihairshop.ro` → `www.` redirects work for robots.txt and sitemaps.
 - [ ] **P11.2** Shared `ShopifySpider` base (sitemap_products_N discovery, `/products/<handle>` URLs, JSON-LD parse, `<h1>` title fallback) + spiders **ProBeauty** and **Beauty Lounge**. Fixtures: `tests/fixtures/probeauty/`, `tests/fixtures/beautylounge/`.
 - [ ] **P11.3** Spider: **Esteto** with category-page discovery (no sitemap). Fixtures: `tests/fixtures/esteto/` (product page + the home page's links). Keep discovery polite: only category listing pages and their pagination, respect robots.txt.
 - [ ] **P11.4** Spider: **XpertBeauty** with a custom parser (no Product JSON-LD). Fixture: `tests/fixtures/xpertbeauty/guinot_mask.html` (59,20 lei, old price 74 lei, brand Guinot, in stock). Filter sitemap URLs to product pages.
