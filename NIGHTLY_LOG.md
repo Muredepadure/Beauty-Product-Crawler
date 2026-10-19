@@ -12,6 +12,20 @@ Blockers / questions for owner: <or "none">
 
 ---
 
+## 2026-10-19 (nightly) — claude/nightly-2026-10-18-P11.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/10
+Done: nothing. Every roadmap task is ticked or on hold/blocked ([!]), and PRs #9 and #10 have
+no review comments yet. I added this entry to PR #10 instead of opening an empty PR.
+- Re-checked the five new Phase 11 shops: the environment proxy still refuses the connection
+  (CONNECT 403), so the live `--limit 10` smoke runs are still not possible from the cloud.
+Tests: not re-run locally (no code changes; `pip install -e ".[dev]"` failed in this container
+while building the `jstyleson` wheel, a dependency of extruct). CI on PR #10's head is green (checks + postgres).
+Next: owner reviews and merges #9 then #10; live smoke runs; then whatever the owner unblocks (P3/P9 hold).
+Blockers / questions for owner:
+- Still open from 2026-10-18: live smoke runs for profihairshop, probeauty, beautylounge, esteto,
+  xpertbeauty (or allow those domains in the cloud environment); Esteto categories/pagination.
+- Nightly runs have no work until #9/#10 are reviewed or the P3/P9 hold is lifted: consider
+  pausing the schedule or adding tasks.
+
 ## 2026-10-18 (nightly) — claude/nightly-2026-10-18-P11.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/10 (builds on #9)
 Done:
 - CI fix: selectolax 1.0 removed `selectolax.parser.HTMLParser` (PR #9 was red on mypy); switched
