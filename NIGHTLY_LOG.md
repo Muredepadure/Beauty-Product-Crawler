@@ -12,6 +12,16 @@ Blockers / questions for owner: <or "none">
 
 ---
 
+## 2026-10-19 (nightly, second run) — claude/nightly-2026-10-18-P11.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/10
+Done: nothing. Same state as the earlier 2026-10-19 run: every roadmap task is ticked or
+blocked/on hold ([!]), PRs #9 and #10 have no reviews or comments, and CI on #10's head is green.
+No empty PR opened; this entry is added to PR #10.
+Tests: not re-run (no code changes). CI on PR #10's head: checks ✓, postgres ✓.
+Next: owner reviews and merges #9 then #10; then whatever the owner unblocks (P3/P9 hold).
+Blockers / questions for owner: unchanged from the entries below (live smoke runs of the five
+Phase 11 spiders, Esteto categories, P3/P9 hold). Nightly runs stay idle until one of these
+moves: consider pausing the schedule.
+
 ## 2026-10-19 (nightly) — claude/nightly-2026-10-18-P11.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/10
 Done: nothing. Every roadmap task is ticked or on hold/blocked ([!]), and PRs #9 and #10 have
 no review comments yet. I added this entry to PR #10 instead of opening an empty PR.
