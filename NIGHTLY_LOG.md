@@ -12,6 +12,14 @@ Blockers / questions for owner: <or "none">
 
 ---
 
+## 2026-10-21 (nightly) — claude/nightly-2026-10-18-P11.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/10
+Done: nothing. Every roadmap task is still ticked or blocked/on hold ([!]); PRs #9 and #10 still
+have no reviews or comments, and #10's head is unchanged since the last green CI run. No empty PR opened.
+Tests: not re-run (no code changes).
+Next: owner reviews and merges #9 then #10; then whatever the owner unblocks (P3/P9 hold).
+Blockers / questions for owner: unchanged (see 2026-10-18). Fifth idle run in a row:
+please pause the nightly schedule or add tasks to ROADMAP.md.
+
 ## 2026-10-20 (nightly, second run) — claude/nightly-2026-10-18-P11.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/10
 Done: nothing. Every roadmap task is still ticked or blocked/on hold ([!]); PRs #9 and #10 have
 no reviews or comments; CI on #10's head is green (checks ✓, postgres ✓). No empty PR opened.
