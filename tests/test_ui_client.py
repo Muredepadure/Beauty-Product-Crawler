@@ -148,3 +148,14 @@ def test_unlisted_mode_is_passed_through(
     api_session.commit()
     assert api.search_products().total == 2  # default "show" is not even sent
     assert api.search_products(unlisted="auto").total == 1
+
+
+def test_brand_unlisted_mode_is_passed_through(
+    api: ApiClient, product_id: int, api_session: Session
+) -> None:
+    api_session.add(Brand(name="Demo Brand", normalized_name="demo brand"))
+    api_session.commit()
+    all_brands = [b.name for b in api.list_brands().items]
+    listed = [b.name for b in api.list_brands(unlisted="auto").items]
+    assert "Demo Brand" in all_brands
+    assert "Demo Brand" not in listed and listed

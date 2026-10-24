@@ -3,8 +3,9 @@
 Rules (CLAUDE.md, "Polite crawling"):
 
 - robots.txt is checked before every request, including each redirect hop, and cached
-  per origin. Per RFC 9309: a 4xx robots.txt means no restrictions; a 5xx or network
-  error means "disallow everything" until the (shorter) error cache expires.
+  per origin. Matching follows RFC 9309, wildcards included (`crawler/robots.py`).
+  Per RFC 9309: a 4xx robots.txt means no restrictions; a 5xx or network error means
+  "disallow everything" until the (shorter) error cache expires.
 - One request at a time per host, at least `request_delay_seconds` apart (or the site's
   `Crawl-delay`, whichever is larger).
 - Retries with exponential backoff on timeouts, connection errors, 429 and 5xx, honoring
@@ -16,7 +17,6 @@ Rules (CLAUDE.md, "Polite crawling"):
 
 import asyncio
 import time
-import urllib.robotparser
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -28,6 +28,7 @@ from urllib.parse import urljoin, urlsplit
 import httpx
 
 from beautycrawler.config import Settings, get_settings
+from beautycrawler.crawler.robots import RobotsTxt
 
 MAX_REDIRECTS = 5
 MAX_RETRY_AFTER_SECONDS = 300.0
@@ -69,7 +70,7 @@ class FetchResult:
 
 @dataclass(slots=True)
 class _Robots:
-    parser: urllib.robotparser.RobotFileParser | None  # None = disallow all
+    parser: RobotsTxt | None  # None = disallow all
     allow_all: bool
     expires_at: float
 
@@ -180,7 +181,7 @@ class PoliteFetcher:
         robots = await self._get_robots(_origin(url))
         if robots.parser is None:
             return []
-        return list(robots.parser.site_maps() or [])
+        return list(robots.parser.sitemaps)
 
     async def crawl_delay(self, url: str) -> float:
         """Seconds to wait between requests to this URL's host."""
@@ -221,9 +222,7 @@ class PoliteFetcher:
             return _Robots(None, False, self._clock() + ROBOTS_ERROR_TTL_SECONDS)
 
         if 200 <= response.status_code < 300:
-            parser = urllib.robotparser.RobotFileParser()
-            parser.parse(response.text.splitlines())
-            return _Robots(parser, False, self._clock() + ttl)
+            return _Robots(RobotsTxt.parse(response.text), False, self._clock() + ttl)
         if 400 <= response.status_code < 500:
             return _Robots(None, True, self._clock() + ttl)
         # 5xx (after retries) or anything unexpected: be conservative, retry later.
