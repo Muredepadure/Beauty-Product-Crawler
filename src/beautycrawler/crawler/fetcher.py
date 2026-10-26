@@ -10,6 +10,10 @@ Rules (CLAUDE.md, "Polite crawling"):
   `Crawl-delay`, whichever is larger).
 - Retries with exponential backoff on timeouts, connection errors, 429 and 5xx, honoring
   `Retry-After`. Other 4xx are returned to the caller without retrying.
+- A 429 with `Retry-After` also slows the host down for the rest of the run: its spacing
+  becomes at least that many seconds (capped at `MAX_ADAPTIVE_DELAY_SECONDS`). Shopify
+  shops answer bots with `429 local_rate_limited, Retry-After: 60`, i.e. "one page a
+  minute"; pacing to that is cheaper and politer than retrying into the limit.
 - Bot-protection pages (e.g. a Cloudflare challenge) raise `BlockedError` and are never
   retried or worked around.
 - Every request carries the configured User-Agent.
@@ -32,6 +36,7 @@ from beautycrawler.crawler.robots import RobotsTxt
 
 MAX_REDIRECTS = 5
 MAX_RETRY_AFTER_SECONDS = 300.0
+MAX_ADAPTIVE_DELAY_SECONDS = 120.0
 ROBOTS_ERROR_TTL_SECONDS = 600.0
 RETRY_STATUSES = frozenset({408, 429, 500, 502, 503, 504})
 
@@ -127,6 +132,7 @@ class PoliteFetcher:
         self._robots_locks: dict[str, asyncio.Lock] = {}
         self._host_locks: dict[str, asyncio.Lock] = {}
         self._last_request_at: dict[str, float] = {}
+        self._adaptive_delay: dict[str, float] = {}  # host -> spacing learned from 429s
 
     async def __aenter__(self) -> Self:
         return self
@@ -228,7 +234,12 @@ class PoliteFetcher:
         # 5xx (after retries) or anything unexpected: be conservative, retry later.
         return _Robots(None, False, self._clock() + ROBOTS_ERROR_TTL_SECONDS)
 
+    def host_delay(self, host: str) -> float:
+        """Extra spacing learned for this host from `429 Retry-After` (0 if none)."""
+        return self._adaptive_delay.get(host.lower(), 0.0)
+
     async def _wait_for_slot(self, host: str, delay: float) -> None:
+        delay = max(delay, self._adaptive_delay.get(host, 0.0))
         last = self._last_request_at.get(host)
         if last is not None:
             remaining = last + delay - self._clock()
@@ -257,8 +268,12 @@ class PoliteFetcher:
 
             if looks_like_bot_challenge(response):
                 raise BlockedError(url, f"bot-protection challenge (HTTP {response.status_code})")
+            retry_after = _retry_after_seconds(response.headers.get("retry-after"))
+            if response.status_code == 429 and retry_after is not None:
+                learned = min(retry_after, MAX_ADAPTIVE_DELAY_SECONDS)
+                if learned > self._adaptive_delay.get(host, 0.0):
+                    self._adaptive_delay[host] = learned
             if response.status_code in RETRY_STATUSES and attempt + 1 < attempts:
-                retry_after = _retry_after_seconds(response.headers.get("retry-after"))
                 wait = backoff if retry_after is None else min(retry_after, MAX_RETRY_AFTER_SECONDS)
                 await self._sleep(max(wait, backoff))
                 continue

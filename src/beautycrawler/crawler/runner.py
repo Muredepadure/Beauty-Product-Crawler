@@ -8,6 +8,12 @@ Retailers marked inactive in the database (e.g. blocked, see CLAUDE.md) are skip
 Scheduling (P6.2): a successful crawl stamps `Retailer.last_crawled_at`; with `due_only`
 a retailer is crawled only once its `crawl_interval_hours` have passed, so an hourly cron
 job running `crawl run --all --due` gives every retailer its own frequency.
+
+Multi-night crawls: `skip_seen_hours` leaves out pages whose listing was seen within that
+many hours, so a catalogue too big for one night continues where the last run stopped;
+`deadline` (a `clock()` value) ends the run between pages, and retailers not reached by
+then are skipped. Only a complete crawl (no limit, nothing skipped, not cut short)
+counts unseen listings as missed.
 """
 
 import importlib
@@ -27,8 +33,13 @@ from sqlalchemy.orm import Session, sessionmaker
 from beautycrawler.config import get_settings
 from beautycrawler.crawler import spiders as spiders_pkg
 from beautycrawler.crawler.fetcher import PoliteFetcher
-from beautycrawler.crawler.spider import CrawlStats, Spider, get_spider, registered_spiders
-from beautycrawler.db.models import Retailer
+from beautycrawler.crawler.spider import (
+    CrawlStats,
+    Spider,
+    get_spider,
+    registered_spiders,
+)
+from beautycrawler.db.models import Offer, Retailer
 from beautycrawler.db.repository import record_missed, upsert_offer
 
 log = logging.getLogger(__name__)
@@ -58,6 +69,12 @@ class RunSummary:
             f"({o['created']} new, {o['changed']} changed, {o['unchanged']} unchanged, "
             f"{o['stale']} stale), {len(self.stats.errors)} errors"
             + (
+                f", {self.stats.skipped_seen} seen recently (skipped)"
+                if self.stats.skipped_seen
+                else ""
+            )
+            + (f", stopped early: {self.stats.stopped}" if self.stats.stopped else "")
+            + (
                 f", {self.missed} not seen ({self.marked_out_of_stock} marked out of stock)"
                 if self.missed
                 else ""
@@ -82,6 +99,8 @@ class RunSummary:
             "missed": self.missed,
             "marked_out_of_stock": self.marked_out_of_stock,
             "errors": list(self.stats.errors),
+            "skipped_seen": self.stats.skipped_seen,
+            "stopped": self.stats.stopped,
         }
 
 
@@ -136,12 +155,26 @@ def get_or_create_retailer(session: Session, spider_cls: type[Spider]) -> Retail
     return retailer
 
 
+def recently_seen_urls(session: Session, retailer: Retailer, hours: float) -> list[str]:
+    """URLs of this retailer's listings seen within the last `hours`."""
+    since = datetime.now(UTC) - timedelta(hours=hours)
+    return list(
+        session.scalars(
+            select(Offer.url).where(Offer.retailer_id == retailer.id, Offer.last_seen_at >= since)
+        )
+    )
+
+
 async def run_spider(
     slug: str,
     session_factory: sessionmaker[Session],
     fetcher: PoliteFetcher,
     limit: int | None = None,
     stale_after: int | None = None,
+    *,
+    skip_seen_hours: float | None = None,
+    deadline: float | None = None,
+    clock: Callable[[], float] = time.monotonic,
 ) -> RunSummary:
     """Crawl one retailer and upsert every offer. Commits in batches.
 
@@ -152,11 +185,14 @@ async def run_spider(
     """
     spider_cls = get_spider(slug)
     summary = RunSummary(retailer=slug)
-    spider = spider_cls(fetcher)
     started = datetime.now(UTC)
     with session_factory() as session:
         retailer = get_or_create_retailer(session, spider_cls)
         session.commit()
+        spider = spider_cls(fetcher, deadline=deadline, clock=clock)
+        if skip_seen_hours:
+            seen = recently_seen_urls(session, retailer, skip_seen_hours)
+            spider.skip_urls = frozenset(spider.page_key(u) for u in seen)
         pending = 0
         async for offer in spider.crawl(limit=limit, stats=summary.stats):
             if offer.retailer != slug:
@@ -168,7 +204,10 @@ async def run_spider(
             if pending >= COMMIT_EVERY:
                 session.commit()
                 pending = 0
-        if limit is None and summary.stats.offers > 0:
+        complete = (
+            limit is None and not summary.stats.skipped_seen and summary.stats.stopped is None
+        )
+        if complete and summary.stats.offers > 0:
             threshold = stale_after if stale_after is not None else get_settings().stale_after_runs
             missed = record_missed(session, retailer, started, threshold)
             summary.missed, summary.marked_out_of_stock = missed.missed, missed.marked_out_of_stock
@@ -216,6 +255,8 @@ async def run_many(
     *,
     include_inactive: bool = False,
     due_only: bool = False,
+    skip_seen_hours: float | None = None,
+    deadline: float | None = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> RunReport:
     """Run retailers one after another; one failing retailer doesn't stop the others."""
@@ -229,6 +270,8 @@ async def run_many(
             reason = "retailer is marked inactive"
         elif slug in not_due:
             reason = f"not due until {not_due[slug].isoformat(timespec='minutes')}"
+        elif deadline is not None and clock() >= deadline:
+            reason = "time limit reached before this retailer's turn"
         if reason is not None:
             log.info(
                 "%s: skipped (%s)",
@@ -240,7 +283,15 @@ async def run_many(
             continue
         start = clock()
         try:
-            summary = await run_spider(slug, session_factory, fetcher, limit)
+            summary = await run_spider(
+                slug,
+                session_factory,
+                fetcher,
+                limit,
+                skip_seen_hours=skip_seen_hours,
+                deadline=deadline,
+                clock=clock,
+            )
         except Exception as exc:
             summary = RunSummary(retailer=slug, failed=f"{type(exc).__name__}: {exc}")
             summary.duration_seconds = clock() - start

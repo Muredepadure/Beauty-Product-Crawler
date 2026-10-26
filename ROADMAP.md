@@ -123,7 +123,7 @@ XML/CSV with price, stock, EAN, image) as the main source, crawling as the fallb
 stores without a feed. Nothing here starts until the owner lifts the hold.
 
 - [!] **P9.1** _On hold (owner)._ Feed importer: read a merchant XML/CSV feed into the same `upsert_offer` path (so matching, history and the UI work unchanged); tested with sample feed files.
-- [!] **P9.2** _On hold (owner)._ Incremental and resumable crawls (sitemap `lastmod`, continue after an interruption).
+- [~] **P9.2** _(2026-10-26, local session: resumable part done — `--skip-seen-hours`, `--until`, adaptive 429 pacing and a rate-limit give-up, `scripts/nightly_crawl.ps1` + Task Scheduler. Still open: sitemap `lastmod`, and remembering dead (404) sitemap URLs so they are not re-fetched every night — ~14% of Profihairshop's sitemap.)_ Incremental and resumable crawls (sitemap `lastmod`, continue after an interruption).
 - [!] **P9.3** _Deferred (owner, 2026-09-28: "wait")._ `pack_count` on Product/Offer so multipacks ("2 x 50 ml") can be matched; revisit once there is multi-store data.
 
 ## Phase 10 — UI redesign (simple, polished)

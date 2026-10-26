@@ -110,6 +110,31 @@ python -m beautycrawler.crawler schedule --retailer notino --every-hours 12
 17 * * * * cd /srv/beautycrawler && .venv/bin/python -m beautycrawler.crawler --log-format json run --all --due --match >> logs/crawl.jsonl 2>&1
 ```
 
+### Multi-night crawls (Windows)
+
+Big catalogues don't fit in one night, so the nightly crawl continues where it stopped:
+
+- `--skip-seen-hours H` skips pages whose listing was seen in the last H hours (the
+  `--limit` then counts only new pages). A spider can override `page_key()` when the
+  shop's product data names a different URL than its sitemap (Profihairshop).
+- `--until HH:MM` stops between pages at that local time; retailers not reached are
+  reported as skipped.
+- A shop answering `429` with `Retry-After` is paced to that interval for the rest of the
+  run; 5 pages in a row still refused after retries ends that shop for the run.
+- A crawl that skipped pages or stopped early is not complete, so it never counts misses
+  (nothing is marked out of stock because it was skipped).
+
+`scripts/nightly_crawl.ps1` runs the priority order (Profihairshop, XpertBeauty, Parfimo,
+Esteto, ProBeauty, Beauty Lounge) with `--skip-seen-hours 144 --until 07:00 --match` and
+logs to `logs\crawl-<date>.log` / `.json`. Register it once with Task Scheduler:
+
+```powershell
+$action  = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$PWD\scripts\nightly_crawl.ps1`""
+$trigger = New-ScheduledTaskTrigger -Daily -At 23:00
+$options = New-ScheduledTaskSettingsSet -WakeToRun -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 9)
+Register-ScheduledTask -TaskName "BeautyCrawler nightly crawl" -Action $action -Trigger $trigger -Settings $options
+```
+
 ### Matching offers to products
 
 ```bash

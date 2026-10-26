@@ -488,9 +488,23 @@ def _vanished(engine: Engine) -> Offer:
         return s.scalars(select(Offer).where(Offer.url == f"{BASE}/p/discontinued")).one()
 
 
-async def _run(engine: Engine, settings: Settings, fake_time: FakeTime, **kw: int) -> RunSummary:
+async def _run(
+    engine: Engine,
+    settings: Settings,
+    fake_time: FakeTime,
+    limit: int | None = None,
+    stale_after: int | None = None,
+    skip_seen_hours: float | None = None,
+) -> RunSummary:
     async with PoliteFetcher(settings, sleep=fake_time.sleep, clock=fake_time.clock) as f:
-        return await runner.run_spider("clitest", make_session_factory(engine), f, **kw)
+        return await runner.run_spider(
+            "clitest",
+            make_session_factory(engine),
+            f,
+            limit=limit,
+            stale_after=stale_after,
+            skip_seen_hours=skip_seen_hours,
+        )
 
 
 async def test_complete_crawl_counts_misses(
@@ -517,6 +531,36 @@ async def test_limited_crawl_does_not_count_misses(
     summary = await _run(engine, settings, fake_time, limit=1, stale_after=1)
     assert summary.missed is None
     assert _vanished(engine).missed_runs == 0
+
+
+async def test_crawl_skipping_seen_pages_does_not_count_misses(
+    mock: respx.MockRouter, db: tuple[str, Engine], settings: Settings, fake_time: FakeTime
+) -> None:
+    _, engine = db
+    _add_vanished_offer(engine)
+    with Session(engine) as s:
+        retailer = s.scalars(select(Retailer).where(Retailer.slug == "clitest")).one()
+        # A listing stored under the page's own URL, seen an hour ago.
+        s.add(
+            Offer(
+                retailer=retailer,
+                url=f"{BASE}/p/1?variant=7",
+                title="Seen recently",
+                price_bani=1_000,
+                in_stock=True,
+                last_seen_at=datetime.now(UTC) - timedelta(hours=1),
+            )
+        )
+        s.commit()
+
+    summary = await _run(engine, settings, fake_time, stale_after=1, skip_seen_hours=24)
+
+    assert summary.stats.skipped_seen == 1  # /p/1 left out, /p/2 crawled
+    assert summary.stats.pages_fetched == 1
+    # Not a complete crawl, so the vanished listing doesn't count a miss.
+    assert summary.missed is None
+    assert (_vanished(engine).missed_runs, _vanished(engine).in_stock) == (0, True)
+    assert "1 seen recently (skipped)" in summary.line()
 
 
 async def test_crawl_finding_nothing_does_not_count_misses(

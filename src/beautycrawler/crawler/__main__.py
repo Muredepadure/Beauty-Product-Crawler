@@ -19,7 +19,9 @@ import argparse
 import asyncio
 import json
 import sys
+import time
 from collections.abc import Callable
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import select
@@ -33,6 +35,16 @@ from beautycrawler.logs import configure_logging
 from beautycrawler.matching.service import match_unmatched
 
 FetcherFactory = Callable[[], PoliteFetcher]
+
+
+def deadline_from(hhmm: str, now: datetime | None = None) -> float:
+    """`time.monotonic()` value at the next local `HH:MM` (today, or tomorrow if past)."""
+    hour, minute = (int(part) for part in hhmm.split(":", 1))
+    now = now or datetime.now().astimezone()
+    target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if target <= now:
+        target += timedelta(days=1)
+    return time.monotonic() + (target - now).total_seconds()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -54,6 +66,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run.add_argument(
         "--due", action="store_true", help="only retailers whose crawl interval has passed"
+    )
+    run.add_argument(
+        "--skip-seen-hours",
+        type=float,
+        metavar="H",
+        help="skip pages whose listing was seen in the last H hours (continue a long crawl)",
+    )
+    run.add_argument(
+        "--until",
+        metavar="HH:MM",
+        help="local time to stop (between pages); retailers not reached are skipped",
     )
 
     schedule = sub.add_parser("schedule", help="show or set per-retailer crawl intervals")
@@ -117,6 +140,8 @@ async def _run(
                 args.limit,
                 include_inactive=args.include_inactive,
                 due_only=args.due,
+                skip_seen_hours=args.skip_seen_hours,
+                deadline=args.deadline,
             )
         matched = None
         if args.match:
@@ -144,6 +169,14 @@ def main(argv: list[str] | None = None, fetcher_factory: FetcherFactory | None =
 
     if args.limit is not None and args.limit < 1:
         print("--limit must be >= 1", file=sys.stderr)
+        return 2
+    if args.skip_seen_hours is not None and args.skip_seen_hours <= 0:
+        print("--skip-seen-hours must be > 0", file=sys.stderr)
+        return 2
+    try:
+        args.deadline = deadline_from(args.until) if args.until else None
+    except ValueError:
+        print("--until must be a time like 07:00", file=sys.stderr)
         return 2
     slugs = sorted(spiders) if args.all else list(dict.fromkeys(args.retailer))
     unknown = [s for s in slugs if s not in spiders]

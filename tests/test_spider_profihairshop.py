@@ -189,3 +189,16 @@ async def test_apex_domain_redirects_to_www(
 
     assert [(o.url, o.price_bani) for o in offers] == [(GIFT, 3490)]
     assert await live_spider.fetcher.crawl_delay(f"{APEX}/seturi-cadou/idc") == 10.0
+
+
+def test_page_key_ignores_the_category_path() -> None:
+    spider = ProfihairshopSpider.__new__(ProfihairshopSpider)
+    sitemap = "https://www.profihairshop.ro/copii/martinelia-magic-ballet-set-manichiura-copii-5652"
+    stored = (
+        "https://www.profihairshop.ro/copii/seturi-manichiura/"
+        "martinelia-magic-ballet-set-manichiura-copii-5652"
+    )
+    assert spider.page_key(sitemap) == spider.page_key(stored)
+    assert spider.page_key(sitemap) != spider.page_key(
+        "https://www.profihairshop.ro/copii/martinelia-magic-ballet-set-manichiura-mini-copii"
+    )

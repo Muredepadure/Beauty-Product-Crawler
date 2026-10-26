@@ -12,6 +12,20 @@ Blockers / questions for owner: <or "none">
 
 ---
 
+## 2026-10-26 — claude/nightly-2026-10-18-P11.1 — (local session with the owner, not a nightly run)
+Done:
+- Live smoke runs of the Phase 11 spiders from the owner's PC: Esteto 10/10; Profihairshop works
+  (errors are 404s: ~14% of its sitemap lists deleted products); XpertBeauty's parser works on
+  live pages (the 10-page test only reached its CMS/category pages, which come first in
+  sitemap-1-1); ProBeauty/Beauty Lounge answer `429 local_rate_limited, Retry-After: 60`.
+- Multi-night crawling (P9.2, partly): `--skip-seen-hours`, `--until HH:MM`, per-host pacing
+  learned from 429 Retry-After, give up a shop after 5 refused pages in a row; partial crawls
+  never count misses. `Spider.page_key()` (Profihairshop: product slug, since its JSON-LD URL
+  has an extra category level). `scripts/nightly_crawl.ps1` + Windows Task Scheduler at 23:00.
+Tests: 810/810 passed, lint ✓, format ✓, mypy ✓
+Next: owner merges #9, #10. Nightly cloud routine paused (nothing it can do without shop access).
+Blockers / questions for owner: none.
+
 ## 2026-10-25 (nightly, second run) — claude/nightly-2026-10-18-P11.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/10
 Done: nothing. Every roadmap task is still ticked or blocked/on hold ([!]); PRs #9 and #10 still
 have no reviews or comments. No empty PR opened.

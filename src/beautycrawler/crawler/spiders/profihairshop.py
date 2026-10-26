@@ -12,6 +12,11 @@ Discovery: the sitemap index `/sitemap-index.xml` lists `products-sitemap.xml` n
 page, category and brand sitemaps, which are skipped. Product URLs nest under their
 category path (`/par/vopsele-oxidanti/<slug>`, `/seturi-cadou/<slug>`), so they look
 like category URLs: only URLs from the products sitemap are treated as products.
+
+The sitemap and the product's own JSON-LD don't always agree on the category path
+(sitemap `/copii/<slug>`, JSON-LD `/copii/seturi-manichiura/<slug>`); the offer is
+stored under the JSON-LD URL, so pages are recognised across runs by their last path
+segment (the product slug) — see `page_key`.
 """
 
 from urllib.parse import urlsplit
@@ -36,3 +41,8 @@ class ProfihairshopSpider(JsonLdSpider):
     def is_product_url(self, url: str) -> bool:
         parts = urlsplit(url)
         return parts.netloc.lower() in _HOSTS and parts.path.strip("/") != ""
+
+    def page_key(self, url: str) -> str:
+        parts = urlsplit(url)
+        slug = parts.path.rstrip("/").rsplit("/", 1)[-1].lower()
+        return f"profihairshop:{slug}"
