@@ -131,7 +131,7 @@ logs to `logs\crawl-<date>.log` / `.json`. Register it once with Task Scheduler:
 ```powershell
 $action  = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$PWD\scripts\nightly_crawl.ps1`""
 $trigger = New-ScheduledTaskTrigger -Daily -At 23:00
-$options = New-ScheduledTaskSettingsSet -WakeToRun -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 9)
+$options = New-ScheduledTaskSettingsSet -WakeToRun -ExecutionTimeLimit (New-TimeSpan -Hours 9)
 Register-ScheduledTask -TaskName "BeautyCrawler nightly crawl" -Action $action -Trigger $trigger -Settings $options
 ```
 
