@@ -125,11 +125,14 @@ Big catalogues don't fit in one night, so the nightly crawl continues where it s
   (nothing is marked out of stock because it was skipped).
 
 `scripts/nightly_crawl.ps1` runs the priority order (Profihairshop, XpertBeauty, Parfimo,
-Esteto, ProBeauty, Beauty Lounge) with `--skip-seen-hours 144 --until 07:00 --match` and
-logs to `logs\crawl-<date>.log` / `.json`. Register it once with Task Scheduler:
+Esteto, ProBeauty, Beauty Lounge) with `--skip-seen-hours 144 --until 07:00 --match
+--keep-awake` and logs to `logs\crawl-<start date>.log` / `.json` (a progress line per
+shop every 5 minutes). Register it once with Task Scheduler. `conhost.exe --headless`
+runs it without a window: on Windows 11 `-WindowStyle Hidden` still opens a Windows
+Terminal window, and closing that window kills the crawl.
 
 ```powershell
-$action  = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$PWD\scripts\nightly_crawl.ps1`""
+$action  = New-ScheduledTaskAction -Execute "conhost.exe" -Argument "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$PWD\scripts\nightly_crawl.ps1`""
 $trigger = New-ScheduledTaskTrigger -Daily -At 23:00
 $options = New-ScheduledTaskSettingsSet -WakeToRun -ExecutionTimeLimit (New-TimeSpan -Hours 9)
 Register-ScheduledTask -TaskName "BeautyCrawler nightly crawl" -Action $action -Trigger $trigger -Settings $options
