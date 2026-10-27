@@ -7,7 +7,9 @@
     python -m beautycrawler.crawler schedule [--retailer SLUG --every-hours N]
 
 Options for `run`: `--due` skips retailers crawled within their interval;
-`--match` links new offers to products afterwards;
+`--match` links offers to products before the crawl (left over from an interrupted run),
+every few minutes during it and afterwards; `--keep-awake` stops Windows from sleeping
+while the run lasts;
 `--summary-json PATH` writes the run report; `--include-inactive` also crawls retailers
 marked inactive in the database. `--log-format json` (before the command) gives one JSON
 log object per line. Exit code 1 when any retailer failed.
@@ -25,16 +27,19 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from beautycrawler.config import get_settings
+from beautycrawler.crawler.awake import keep_awake
 from beautycrawler.crawler.fetcher import PoliteFetcher
 from beautycrawler.crawler.runner import RunReport, load_spiders, next_due, run_many
 from beautycrawler.db.models import Retailer
 from beautycrawler.db.session import make_engine, make_session_factory
 from beautycrawler.logs import configure_logging
-from beautycrawler.matching.service import match_unmatched
+from beautycrawler.matching.service import MatchMethod, match_unmatched
 
 FetcherFactory = Callable[[], PoliteFetcher]
+STILL_WAITING = (MatchMethod.AWAITING_REVIEW.value, MatchMethod.UNMATCHED.value)
 
 
 def deadline_from(hhmm: str, now: datetime | None = None) -> float:
@@ -59,7 +64,12 @@ def build_parser() -> argparse.ArgumentParser:
     which.add_argument("--all", action="store_true", help="every registered spider")
     run.add_argument("--limit", type=int, help="max product pages per retailer")
     run.add_argument("--database-url", help="override DATABASE_URL")
-    run.add_argument("--match", action="store_true", help="match new offers to products after")
+    run.add_argument(
+        "--match", action="store_true", help="link new offers to products (also during the run)"
+    )
+    run.add_argument(
+        "--keep-awake", action="store_true", help="keep Windows from sleeping during the run"
+    )
     run.add_argument("--summary-json", type=Path, metavar="PATH", help="write the run report")
     run.add_argument(
         "--include-inactive", action="store_true", help="also crawl retailers marked inactive"
@@ -132,6 +142,24 @@ async def _run(
     engine = make_engine(args.database_url)
     try:
         factory = make_session_factory(engine)
+        matched: dict[str, int] | None = None
+        on_progress = None
+        if args.match:
+            matched = {}
+
+            def link(session: Session) -> None:
+                counts = match_unmatched(session)
+                # Offers still waiting are seen again on every pass: report the latest
+                # count for those, and add up the links actually made.
+                for method in STILL_WAITING:
+                    matched.pop(method, None)
+                for method, n in counts.items():
+                    matched[method] = matched.get(method, 0) + n
+
+            on_progress = link
+            with factory() as session:  # offers an interrupted run left unlinked
+                link(session)
+                session.commit()
         async with fetcher_factory() as fetcher:
             report = await run_many(
                 slugs,
@@ -142,11 +170,11 @@ async def _run(
                 due_only=args.due,
                 skip_seen_hours=args.skip_seen_hours,
                 deadline=args.deadline,
+                on_progress=on_progress,
             )
-        matched = None
-        if args.match:
+        if on_progress is not None:
             with factory() as session:
-                matched = dict(match_unmatched(session))
+                on_progress(session)
                 session.commit()
         return report, matched
     finally:
@@ -189,7 +217,8 @@ def main(argv: list[str] | None = None, fetcher_factory: FetcherFactory | None =
         return 0
 
     factory = fetcher_factory or (lambda: PoliteFetcher(get_settings()))
-    report, matched = asyncio.run(_run(args, slugs, factory))
+    with keep_awake(args.keep_awake):
+        report, matched = asyncio.run(_run(args, slugs, factory))
     for summary in report.summaries:
         print(summary.line())
     data = report.to_dict()

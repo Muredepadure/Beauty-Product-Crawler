@@ -1,5 +1,6 @@
 import json
 import logging
+from collections import Counter
 from collections.abc import AsyncIterator, Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -572,3 +573,66 @@ async def test_crawl_finding_nothing_does_not_count_misses(
     summary = await _run(engine, settings, fake_time, stale_after=1)
     assert (summary.stats.offers, summary.missed) == (0, None)
     assert (_vanished(engine).missed_runs, _vanished(engine).in_stock) == (0, True)
+
+
+async def test_progress_commits_logs_and_calls_the_hook(
+    mock: respx.MockRouter,
+    db: tuple[str, Engine],
+    settings: Settings,
+    fake_time: FakeTime,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _, engine = db
+    factory = make_session_factory(engine)
+    seen: list[int] = []
+
+    def hook(session: Session) -> None:
+        # Called after a commit: a separate connection already sees the offers.
+        seen.append(count(engine, Offer))
+
+    caplog.set_level(logging.INFO, logger="beautycrawler.crawler.runner")
+    async with fetcher_factory(settings, fake_time)() as fetcher:
+        await runner.run_spider("clitest", factory, fetcher, on_progress=hook, progress_every=0)
+    assert seen == [1, 1]  # both pages give the same canonical offer
+    progress = [r for r in caplog.records if getattr(r, "event", None) == "crawl_progress"]
+    assert "clitest: 1 pages, 1 offers so far (1 new), 0 errors" in progress[0].getMessage()
+
+
+def test_match_links_offers_left_by_an_interrupted_run(
+    mock: respx.MockRouter,
+    db: tuple[str, Engine],
+    settings: Settings,
+    fake_time: FakeTime,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    url, engine = db
+    # A crawl without --match stands in for a night that was killed before linking.
+    plain = ["run", "--retailer", "clitest", "--database-url", url]
+    assert main(plain, fetcher_factory(settings, fake_time)) == 0
+    with Session(engine) as s:
+        assert s.scalars(select(Offer)).one().product_id is None
+    # The next run links it before crawling, even if it then crawls nothing.
+    argv = ["run", "--retailer", "clitest", "--limit", "1", "--database-url", url, "--match"]
+    argv += ["--skip-seen-hours", "24"]
+    assert main(argv, fetcher_factory(settings, fake_time)) == 0
+    assert "matching: new_product 1" in capsys.readouterr().out
+    with Session(engine) as s:
+        assert s.scalars(select(Offer)).one().product_id is not None
+
+
+def test_offers_still_waiting_are_not_counted_once_per_pass(
+    mock: respx.MockRouter,
+    db: tuple[str, Engine],
+    settings: Settings,
+    fake_time: FakeTime,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    url, _ = db
+    passes = iter([Counter(unmatched=3), Counter(unmatched=3, new_product=1)])
+    monkeypatch.setattr(
+        "beautycrawler.crawler.__main__.match_unmatched", lambda session: next(passes)
+    )
+    argv = ["run", "--retailer", "clitest", "--database-url", url, "--match"]
+    assert main(argv, fetcher_factory(settings, fake_time)) == 0
+    assert "matching: new_product 1, unmatched 3" in capsys.readouterr().out

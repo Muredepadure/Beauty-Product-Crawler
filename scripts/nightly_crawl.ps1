@@ -6,7 +6,10 @@
 #   once a week.
 # - --until 07:00: stops cleanly between pages in the morning; shops not reached wait
 #   for the next night.
-# - --match links new listings to catalogue products after the crawl.
+# - --match links new listings to catalogue products: at the start (anything an interrupted
+#   night left), every 5 minutes during the crawl, and at the end.
+# - --keep-awake asks Windows not to sleep or turn the screen off until the crawl ends.
+# - -v writes a progress line per shop every 5 minutes, so a stopped run shows when.
 # Logs and run reports go to logs\ (git-ignored), one file per night.
 
 $ErrorActionPreference = "Continue"
@@ -21,9 +24,10 @@ $report = Join-Path $logs "crawl-$stamp.json"
 
 $python = Join-Path $root ".venv\Scripts\python.exe"
 $env:PYTHONIOENCODING = "utf-8"
+$env:PYTHONUNBUFFERED = "1"
 
 "=== $(Get-Date -Format s) nightly crawl started" | Out-File -FilePath $log -Append -Encoding utf8
-& $python -m beautycrawler.crawler run `
+& $python -m beautycrawler.crawler -v run `
     --retailer profihairshop `
     --retailer xpertbeauty `
     --retailer parfimo `
@@ -33,5 +37,6 @@ $env:PYTHONIOENCODING = "utf-8"
     --skip-seen-hours 144 `
     --until 07:00 `
     --match `
+    --keep-awake `
     --summary-json $report *>> $log
 "=== $(Get-Date -Format s) nightly crawl finished (exit code $LASTEXITCODE)" | Out-File -FilePath $log -Append -Encoding utf8
