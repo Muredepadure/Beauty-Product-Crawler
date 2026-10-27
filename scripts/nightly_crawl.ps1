@@ -27,16 +27,16 @@ $env:PYTHONIOENCODING = "utf-8"
 $env:PYTHONUNBUFFERED = "1"
 
 "=== $(Get-Date -Format s) nightly crawl started" | Out-File -FilePath $log -Append -Encoding utf8
-& $python -m beautycrawler.crawler -v run `
-    --retailer profihairshop `
-    --retailer xpertbeauty `
-    --retailer parfimo `
-    --retailer esteto `
-    --retailer probeauty `
-    --retailer beautylounge `
-    --skip-seen-hours 144 `
-    --until 07:00 `
-    --match `
-    --keep-awake `
-    --summary-json $report *>> $log
+# cmd.exe does the redirection: Windows PowerShell's own `>>` would write UTF-16 and wrap
+# every stderr (log) line in an error record. Paths go through environment variables to
+# avoid quoting trouble with the spaces in them.
+$env:CRAWL_PY = $python
+$env:CRAWL_LOG = $log
+$env:CRAWL_REPORT = $report
+$crawl = '"%CRAWL_PY%" -m beautycrawler.crawler -v run' +
+    ' --retailer profihairshop --retailer xpertbeauty --retailer parfimo' +
+    ' --retailer esteto --retailer probeauty --retailer beautylounge' +
+    ' --skip-seen-hours 144 --until 07:00 --match --keep-awake' +
+    ' --summary-json "%CRAWL_REPORT%" >> "%CRAWL_LOG%" 2>&1'
+& cmd.exe /d /c $crawl
 "=== $(Get-Date -Format s) nightly crawl finished (exit code $LASTEXITCODE)" | Out-File -FilePath $log -Append -Encoding utf8
