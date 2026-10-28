@@ -186,7 +186,10 @@ the one custom CSS block live in `src/beautycrawler/ui_style.py`.
 
 - **Caută produse**: search with brand/category/price/stock filters and product cards;
   a product page (`?product=<id>`, shareable) with the price table across retailers
-  (cheapest highlighted, links out) and the price-history chart.
+  (cheapest highlighted, links out) and the price-history chart. The search text,
+  filters, sort and page are kept in the URL (`?q=…&brand=…&page=2`), so results can be
+  bookmarked or shared and the browser's back/forward arrows move between results and
+  product pages.
 - **Comparație prețuri**: pick a brand to see each retailer's position and a
   product-by-retailer grid vs the median; pick a retailer to see where it is over or
   under the market.

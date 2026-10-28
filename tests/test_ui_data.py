@@ -14,6 +14,7 @@ from beautycrawler.api.schemas import (
 from beautycrawler.ui_client import ApiError
 from beautycrawler.ui_data import (
     MARKET_LEGEND_HTML,
+    SEARCH_DEFAULTS,
     START_API_COMMAND,
     active_filter_count,
     api_error_message,
@@ -40,6 +41,8 @@ from beautycrawler.ui_data import (
     products_label,
     retailer_rows,
     safe_image_url,
+    search_state_from_params,
+    search_state_to_params,
     stores_label,
     stores_line,
 )
@@ -561,3 +564,63 @@ def test_matrix_rows() -> None:
         {"Produs": "Effaclar Duo+", "Emag": -3.5, "Notino": 3.5},
         {"Produs": "Cicaplast", "Emag": None, "Notino": None},
     ]
+
+
+# --- P12.1: search state in the URL ---------------------------------------------------
+
+
+def test_default_search_state_has_no_params() -> None:
+    assert search_state_to_params(SEARCH_DEFAULTS) == {}
+    assert search_state_to_params({}) == {}
+    assert search_state_from_params({}) == SEARCH_DEFAULTS
+
+
+def test_search_state_round_trip() -> None:
+    state: dict[str, object] = {
+        "q": "Effaclar Duo",
+        "brand": "L'Oréal Paris",
+        "category": "Îngrijirea tenului",
+        "min_lei": 49.9,
+        "max_lei": 120.0,
+        "in_stock": True,
+        "sort": "price_asc",
+        "page": 3,
+    }
+    params = search_state_to_params(state)
+    assert params == {
+        "q": "Effaclar Duo",
+        "brand": "L'Oréal Paris",
+        "category": "Îngrijirea tenului",
+        "min": "49.9",
+        "max": "120",
+        "in_stock": "1",
+        "sort": "price_asc",
+        "page": "3",
+    }
+    assert search_state_from_params(params) == state
+
+
+def test_blank_values_stay_out_of_the_url() -> None:
+    assert search_state_to_params({"q": "   ", "brand": None, "in_stock": False}) == {}
+
+
+@pytest.mark.parametrize(
+    ("params", "changed"),
+    [
+        ({"sort": "random"}, {}),
+        ({"page": "0"}, {}),
+        ({"page": "-2"}, {}),
+        ({"page": "doi"}, {}),
+        ({"min": "abc", "max": "-5"}, {}),
+        ({"min": "nan", "max": "inf"}, {}),
+        ({"min": "59,90"}, {"min_lei": 59.9}),  # a Romanian decimal comma, typed by hand
+        ({"in_stock": "true"}, {"in_stock": True}),
+        ({"in_stock": "0"}, {}),
+        ({"q": "  ser  "}, {"q": "ser"}),
+        ({"utm_source": "x"}, {}),
+    ],
+)
+def test_bad_or_odd_params_fall_back_to_defaults(
+    params: dict[str, str], changed: dict[str, object]
+) -> None:
+    assert search_state_from_params(params) == {**SEARCH_DEFAULTS, **changed}

@@ -5,6 +5,12 @@
 Talks to the API only through `beautycrawler.ui_client.ApiClient` (base URL from
 `BEAUTYCRAWLER_API_BASE_URL`). A product page is addressed as `?product=<id>`, so
 product links can be shared.
+
+The URL is the source of truth for the search (P12.1): the search text, filters, sort
+and page are kept in the query parameters (`?q=…&brand=…&page=2`) next to `product`.
+Streamlit pushes a browser history entry whenever the script changes `st.query_params`
+and reruns the script when the back/forward arrows change the URL, so those arrows move
+between result pages and product pages, and every results URL can be shared.
 """
 
 from html import escape
@@ -20,6 +26,8 @@ from beautycrawler.config import get_settings
 from beautycrawler.ui_client import ApiClient, ApiError, NotFound
 from beautycrawler.ui_data import (
     MARKET_LEGEND_HTML,
+    SEARCH_DEFAULTS,
+    SEARCH_URL_KEYS,
     SORT_LABELS,
     active_filter_count,
     api_error_message,
@@ -39,6 +47,8 @@ from beautycrawler.ui_data import (
     product_header_html,
     products_label,
     retailer_rows,
+    search_state_from_params,
+    search_state_to_params,
 )
 from beautycrawler.ui_style import (
     CSS,
@@ -75,6 +85,58 @@ def close_product() -> None:
 
 def reset_page() -> None:
     st.session_state["page"] = 1
+
+
+# ------------------------------------------------------------------ search state in URL
+
+URL_SYNCED = "_search_url"  # the search params the widgets were last loaded from/saved to
+
+
+def search_params_in_url() -> dict[str, str]:
+    names = set(SEARCH_URL_KEYS.values())
+    return {k: v for k, v in st.query_params.to_dict().items() if k in names}
+
+
+def load_search_from_url() -> None:
+    """Set the search widgets from the URL when it was changed outside the search page
+    (first load, a shared link, the back/forward arrows, coming back from a product).
+
+    While the user works the widgets, the URL equals what this page last wrote, so the
+    widgets' own state wins and `save_search_to_url` updates the URL after them.
+    """
+    in_url = search_params_in_url()
+    if st.session_state.get(URL_SYNCED) == in_url:
+        return
+    state = search_state_from_params(in_url)
+    state["brand"] = state["brand"] or ALL_BRANDS
+    for key, value in state.items():
+        st.session_state[key] = value
+    st.session_state[URL_SYNCED] = in_url
+
+
+def search_state() -> dict[str, object]:
+    state = {key: st.session_state.get(key, default) for key, default in SEARCH_DEFAULTS.items()}
+    if state["brand"] == ALL_BRANDS:
+        state["brand"] = ""
+    return state
+
+
+def save_search_to_url() -> None:
+    """Write the current search into the URL (one history entry per change); other
+    parameters are kept."""
+    wanted = search_state_to_params(search_state())
+    if wanted != search_params_in_url():
+        others = {
+            k: v for k, v in st.query_params.to_dict().items() if k not in SEARCH_URL_KEYS.values()
+        }
+        st.query_params.from_dict({**others, **wanted})
+    st.session_state[URL_SYNCED] = wanted
+
+
+def forget_search_widgets() -> None:
+    """Off the search page Streamlit drops the search widgets' state, so the next visit
+    reloads it from the URL."""
+    st.session_state.pop(URL_SYNCED, None)
 
 
 def show_api_error(exc: ApiError, what: str) -> None:
@@ -151,9 +213,10 @@ def search_filters() -> dict[str, Any]:
     with st.sidebar:
         st.header("Filtre")
         filter_group("Produs")
-        brand = st.selectbox(
-            "Brand", [ALL_BRANDS, *brand_names()], key="brand", on_change=reset_page
-        )
+        brands = [ALL_BRANDS, *brand_names()]
+        if st.session_state.get("brand") not in brands:  # e.g. an old link
+            st.session_state["brand"] = ALL_BRANDS
+        brand = st.selectbox("Brand", brands, key="brand", on_change=reset_page)
         category = st.text_input(
             "Categorie", key="category", placeholder="ex. Seruri", on_change=reset_page
         )
@@ -208,6 +271,7 @@ def empty_state(query: str | None, filters: dict[str, Any]) -> None:
 
 
 def search_page(api: ApiClient) -> None:
+    load_search_from_url()
     st.title("🔎 Caută produse")
     q = st.text_input(
         "Caută un produs sau un brand",
@@ -229,6 +293,7 @@ def search_page(api: ApiClient) -> None:
             on_change=reset_page,
         )
     page = int(st.session_state.get("page", 1))
+    save_search_to_url()
     try:
         with st.spinner("Se încarcă produsele…"):
             # "auto": the seed's demo products vanish once real offers exist (P10.7).
@@ -249,6 +314,9 @@ def search_page(api: ApiClient) -> None:
             product_card(product)
 
     pages = page_count(results.total, PAGE_SIZE)
+    if page > pages:  # e.g. an old link, now that there are fewer results
+        st.session_state["page"] = pages
+        st.rerun()
     if pages > 1:
         st.number_input("Pagina", min_value=1, max_value=pages, step=1, key="page")
         st.caption(f"din {pages}")
@@ -395,10 +463,13 @@ def main() -> None:
         close_product()
         raw_id = None
     if raw_id is not None:
+        forget_search_widgets()
         product_page(api, int(raw_id))
     else:
         with st.sidebar:
             choice = st.radio("Pagina", list(PAGES), key="nav")
+        if PAGES[choice] is not search_page:
+            forget_search_widgets()
         PAGES[choice](api)
     footer()
 

@@ -282,6 +282,83 @@ def lei_to_bani(lei: float | None) -> int | None:
     return round(lei * 100)
 
 
+# --- P12.1 search state in the URL ---------------------------------------------------
+
+SEARCH_DEFAULTS: dict[str, object] = {
+    "q": "",
+    "brand": "",  # "" = every brand
+    "category": "",
+    "min_lei": 0.0,
+    "max_lei": 0.0,
+    "in_stock": False,
+    "sort": "name",
+    "page": 1,
+}
+"""The search page's state (search text, sidebar filters, sort, page) and its defaults."""
+
+SEARCH_URL_KEYS: dict[str, str] = {
+    "q": "q",
+    "brand": "brand",
+    "category": "category",
+    "min_lei": "min",
+    "max_lei": "max",
+    "in_stock": "in_stock",
+    "sort": "sort",
+    "page": "page",
+}
+"""State key -> query parameter name."""
+
+
+def _url_number(value: float) -> str:
+    """60.0 -> "60", 59.9 -> "59.9"."""
+    return str(int(value)) if value.is_integer() else str(value)
+
+
+def search_state_to_params(state: Mapping[str, object]) -> dict[str, str]:
+    """Search state as query parameters; empty and default values are left out, so the
+    plain search page is just "/"."""
+    params: dict[str, str] = {}
+    for key, name in SEARCH_URL_KEYS.items():
+        value = state.get(key, SEARCH_DEFAULTS[key])
+        if value is None or value == SEARCH_DEFAULTS[key] or value == "":
+            continue
+        if isinstance(value, bool):
+            text = "1"
+        elif isinstance(value, float):
+            text = _url_number(value)
+        else:
+            text = str(value).strip()
+        if text:
+            params[name] = text
+    return params
+
+
+def _parse_lei(text: str) -> float:
+    try:
+        value = float(text.replace(",", "."))
+    except ValueError:
+        return 0.0
+    return value if 0 < value < 1e9 else 0.0  # also rejects nan/inf
+
+
+def search_state_from_params(params: Mapping[str, str]) -> dict[str, object]:
+    """The search state a URL describes. Anything missing or invalid (a hand-edited or
+    outdated link) falls back to its default instead of failing."""
+    state = dict(SEARCH_DEFAULTS)
+    get = {key: (params.get(name) or "").strip() for key, name in SEARCH_URL_KEYS.items()}
+    state["q"] = get["q"]
+    state["brand"] = get["brand"]
+    state["category"] = get["category"]
+    state["min_lei"] = _parse_lei(get["min_lei"])
+    state["max_lei"] = _parse_lei(get["max_lei"])
+    state["in_stock"] = get["in_stock"].lower() in ("1", "true", "da")
+    if get["sort"] in SORT_LABELS:
+        state["sort"] = get["sort"]
+    if get["page"].isdigit() and int(get["page"]) >= 1:
+        state["page"] = int(get["page"])
+    return state
+
+
 # --- P7.4 competitor view ------------------------------------------------------------
 
 MARKET_BAND_PCT = 2.0  # within ±2 % of the median counts as "at market"

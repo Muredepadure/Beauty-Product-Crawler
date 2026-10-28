@@ -399,3 +399,143 @@ def test_competitor_matrix_marks_unlisted_cells(
 def test_competitor_view_without_brands(ui_api: respx.MockRouter) -> None:
     at = open_competitors()
     assert "Nu există încă branduri" in at.info[0].value
+
+
+# --- P12.1: the search lives in the URL ----------------------------------------------
+
+
+def url(at: AppTest) -> dict[str, str]:
+    # AppTest gives ["v"] on older Streamlit releases and "v" on 1.66.
+    return {k: v[-1] if isinstance(v, list) else v for k, v in at.query_params.items()}
+
+
+@pytest.fixture
+def many_products(api_session: Session) -> list[int]:
+    """30 products without offers (shown before the first crawl): two result pages."""
+    products = [Product(name=f"Produs {i:02}", normalized_name=f"produs {i:02}") for i in range(30)]
+    api_session.add_all(products)
+    api_session.commit()
+    return [p.id for p in products]
+
+
+def test_search_is_written_to_the_url(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    at = run_app()
+    assert url(at) == {}  # defaults stay out of the URL
+    at.text_input(key="q").input("Effaclar").run()
+    at.selectbox(key="brand").select("La Roche-Posay").run()
+    at.text_input(key="category").input("Ingrijirea tenului").run()
+    at.number_input(key="min_lei").set_value(50.0).run()
+    at.number_input(key="max_lei").set_value(99.5).run()
+    at.checkbox(key="in_stock").check().run()
+    at.selectbox(key="sort").select("price_asc").run()
+    assert url(at) == {
+        "q": "Effaclar",
+        "brand": "La Roche-Posay",
+        "category": "Ingrijirea tenului",
+        "min": "50",
+        "max": "99.5",
+        "in_stock": "1",
+        "sort": "price_asc",
+    }
+    assert card_names(at) == ["Effaclar Duo+"]
+    at.button(key="reset_filters").click().run()
+    assert url(at) == {"q": "Effaclar", "sort": "price_asc"}  # search text and sort stay
+
+
+def test_shared_results_link(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    at = run_app({"brand": "La Roche-Posay", "sort": "price_desc", "in_stock": "1"})
+    assert not at.exception
+    assert at.selectbox(key="brand").value == "La Roche-Posay"
+    assert at.selectbox(key="sort").value == "price_desc"
+    assert at.checkbox(key="in_stock").value is True
+    assert card_names(at) == ["Effaclar Duo+", "Cicaplast Baume B5+"]
+
+
+def test_back_button_returns_to_the_same_results(
+    ui_api: respx.MockRouter, shop: dict[str, int]
+) -> None:
+    at = run_app()
+    at.selectbox(key="brand").select("La Roche-Posay").run()
+    at.selectbox(key="sort").select("price_desc").run()
+    at.button(key=f"open-{shop['cica']}").click().run()
+    assert url(at) == {
+        "brand": "La Roche-Posay",
+        "sort": "price_desc",
+        "product": str(shop["cica"]),
+    }
+    assert at.title[0].value == "Cicaplast Baume B5+"
+    at.button[0].click().run()  # "← Înapoi la rezultate"
+    assert url(at) == {"brand": "La Roche-Posay", "sort": "price_desc"}
+    assert at.selectbox(key="brand").value == "La Roche-Posay"
+    assert at.selectbox(key="sort").value == "price_desc"
+    assert card_names(at) == ["Effaclar Duo+", "Cicaplast Baume B5+"]
+
+
+def test_back_button_keeps_the_page(ui_api: respx.MockRouter, many_products: list[int]) -> None:
+    at = run_app()
+    assert at.subheader[0].value == "30 de produse"
+    at.number_input(key="page").set_value(2).run()
+    assert url(at) == {"page": "2"}
+    assert card_names(at)[0] == "Produs 24"
+    at.button(key=f"open-{many_products[25]}").click().run()
+    at.button[0].click().run()
+    assert at.number_input(key="page").value == 2
+    assert card_names(at)[0] == "Produs 24"
+    at.text_input(key="q").input("produs").run()  # a new search starts on page 1
+    assert url(at) == {"q": "produs"}
+
+
+def test_browser_arrows_restore_earlier_urls(
+    ui_api: respx.MockRouter, shop: dict[str, int]
+) -> None:
+    """The back/forward arrows rerun the script with the earlier URL."""
+    at = run_app()
+    at.selectbox(key="brand").select("CeraVe").run()
+    results = url(at)
+    at.button(key=f"open-{shop['cleanser']}").click().run()
+    product = url(at)
+    at.query_params.clear()
+    at.query_params.update(results)
+    at.run()  # back: the CeraVe results
+    assert at.title[0].value == "🔎 Caută produse"
+    assert at.selectbox(key="brand").value == "CeraVe"
+    assert card_names(at) == ["Hydrating Cleanser"]
+    at.query_params.clear()
+    at.run()  # back again: the unfiltered search
+    assert at.selectbox(key="brand").value == "Toate brandurile"
+    assert len(card_names(at)) == 3
+    at.query_params.update(product)
+    at.run()  # forward twice: the product page
+    assert at.title[0].value == "Hydrating Cleanser"
+
+
+def test_competitor_page_round_trip_keeps_the_search(
+    ui_api: respx.MockRouter, shop: dict[str, int]
+) -> None:
+    at = run_app()
+    at.checkbox(key="in_stock").check().run()
+    at.radio(key="nav").set_value("🏷️ Comparație prețuri").run()
+    at.radio(key="nav").set_value("🔎 Caută produse").run()
+    assert at.checkbox(key="in_stock").value is True
+    assert card_names(at) == ["Cicaplast Baume B5+", "Effaclar Duo+"]
+
+
+def test_bad_search_urls_fall_back_to_defaults(
+    ui_api: respx.MockRouter, shop: dict[str, int]
+) -> None:
+    at = run_app({"brand": "Nu Există", "sort": "random", "min": "abc", "page": "-3"})
+    assert not at.exception
+    assert at.selectbox(key="brand").value == "Toate brandurile"
+    assert at.selectbox(key="sort").value == "name"
+    assert len(card_names(at)) == 3
+    assert url(at) == {}  # rewritten without the invalid values
+
+
+def test_page_beyond_the_results_shows_the_last_page(
+    ui_api: respx.MockRouter, many_products: list[int]
+) -> None:
+    at = run_app({"page": "9"})
+    assert not at.exception
+    assert at.number_input(key="page").value == 2
+    assert url(at) == {"page": "2"}
+    assert card_names(at)[0] == "Produs 24"
