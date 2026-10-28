@@ -12,6 +12,20 @@ Blockers / questions for owner: <or "none">
 
 ---
 
+## 2026-10-28 (nightly) — claude/nightly-2026-10-28-P12.1 — PR (see below)
+Done:
+- P12.1: the search (text, filters, sort, page) lives in the URL; "Înapoi la rezultate" and the
+  browser back/forward arrows restore it, results URLs can be shared. Plain `st.query_params`
+  works on Streamlit 1.66 (it pushes a history entry; back/forward reruns the script), checked
+  in headless Chromium against a local seeded run.
+- P12.2: shop filter — `retailer=<slug>` (repeatable) on `/api/products`, sidebar "Magazine"
+  multiselect (shops with listed products), `?retailer=a,b` in the URL.
+- P12.3: "Doar produse comune" — `common=true` (all chosen shops, or 2+ shops with none chosen),
+  sort switches to most shops first, caption + empty state explain the overlap.
+Tests: 869/869 passed, lint ✓, format ✓, mypy ✓
+Next: owner reviews; every other task is ticked or on hold ([!]).
+Blockers / questions for owner: see the PR (one history entry per filter change: OK?).
+
 ## 2026-10-26 — claude/nightly-2026-10-18-P11.1 — (local session with the owner, not a nightly run)
 Done:
 - Live smoke runs of the Phase 11 spiders from the owner's PC: Esteto 10/10; Profihairshop works
