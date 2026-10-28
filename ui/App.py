@@ -109,6 +109,7 @@ def load_search_from_url() -> None:
         return
     state = search_state_from_params(in_url)
     state["brand"] = state["brand"] or ALL_BRANDS
+    state["retailers"] = list(state["retailers"])  # the multiselect wants a list
     for key, value in state.items():
         st.session_state[key] = value
     st.session_state[URL_SYNCED] = in_url
@@ -187,6 +188,7 @@ FILTER_DEFAULTS: dict[str, object] = {
     "min_lei": 0.0,
     "max_lei": 0.0,
     "in_stock": False,
+    "retailers": (),
 }
 
 
@@ -198,9 +200,23 @@ def brand_names() -> list[str]:
         return []
 
 
+@st.cache_data(ttl=600)
+def shop_names() -> dict[str, str]:
+    """Slug -> name of the retailers that have listed products, by name."""
+    try:
+        retailers = get_client().list_retailers()
+    except ApiError:
+        return {}
+    return {
+        r.slug: r.name
+        for r in sorted(retailers, key=lambda r: r.name.casefold())
+        if r.product_count
+    }
+
+
 def reset_filters() -> None:
     for key, default in FILTER_DEFAULTS.items():
-        st.session_state[key] = default
+        st.session_state[key] = list(default) if isinstance(default, tuple) else default
     reset_page()
 
 
@@ -219,6 +235,20 @@ def search_filters() -> dict[str, Any]:
         brand = st.selectbox("Brand", brands, key="brand", on_change=reset_page)
         category = st.text_input(
             "Categorie", key="category", placeholder="ex. Seruri", on_change=reset_page
+        )
+        filter_group("Magazine")
+        shops = shop_names()
+        chosen = st.session_state.get("retailers") or []
+        if any(slug not in shops for slug in chosen):  # e.g. an old link
+            st.session_state["retailers"] = [slug for slug in chosen if slug in shops]
+        retailers = st.multiselect(
+            "Magazine",
+            list(shops),
+            format_func=lambda slug: shops.get(slug, slug),
+            key="retailers",
+            placeholder="Toate magazinele",
+            label_visibility="collapsed",
+            on_change=reset_page,
         )
         filter_group("Preț (lei)")
         low, high = st.columns(2)
@@ -246,6 +276,7 @@ def search_filters() -> dict[str, Any]:
             "min_price_bani": lei_to_bani(min_lei),
             "max_price_bani": lei_to_bani(max_lei),
             "in_stock": in_stock,
+            "retailers": retailers or None,
         }
         st.button(
             "Resetează filtrele",

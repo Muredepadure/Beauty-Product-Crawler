@@ -583,6 +583,7 @@ def test_search_state_round_trip() -> None:
         "min_lei": 49.9,
         "max_lei": 120.0,
         "in_stock": True,
+        "retailers": ("profihairshop", "xpertbeauty"),
         "sort": "price_asc",
         "page": 3,
     }
@@ -594,6 +595,7 @@ def test_search_state_round_trip() -> None:
         "min": "49.9",
         "max": "120",
         "in_stock": "1",
+        "retailer": "profihairshop,xpertbeauty",
         "sort": "price_asc",
         "page": "3",
     }
@@ -602,6 +604,8 @@ def test_search_state_round_trip() -> None:
 
 def test_blank_values_stay_out_of_the_url() -> None:
     assert search_state_to_params({"q": "   ", "brand": None, "in_stock": False}) == {}
+    assert search_state_to_params({"retailers": []}) == {}
+    assert search_state_to_params({"retailers": ["esteto"]}) == {"retailer": "esteto"}
 
 
 @pytest.mark.parametrize(
@@ -617,6 +621,8 @@ def test_blank_values_stay_out_of_the_url() -> None:
         ({"in_stock": "true"}, {"in_stock": True}),
         ({"in_stock": "0"}, {}),
         ({"q": "  ser  "}, {"q": "ser"}),
+        ({"retailer": "Esteto, ,esteto,probeauty"}, {"retailers": ("esteto", "probeauty")}),
+        ({"retailer": ","}, {}),
         ({"utm_source": "x"}, {}),
     ],
 )

@@ -539,3 +539,37 @@ def test_page_beyond_the_results_shows_the_last_page(
     assert at.number_input(key="page").value == 2
     assert url(at) == {"page": "2"}
     assert card_names(at)[0] == "Produs 24"
+
+
+# --- P12.2: shop filter ----------------------------------------------------------------
+
+
+def test_shop_filter(ui_api: respx.MockRouter, shop: dict[str, int], api_session: Session) -> None:
+    api_session.add(Retailer(slug="citrika", name="Citrika", domain="citrika.ro"))  # no offers
+    api_session.commit()
+    at = run_app()
+    shops = at.multiselect(key="retailers")
+    assert shops.options == ["eMAG", "Notino"]  # names, only shops with listed products
+    shops.select("notino").run()
+    assert card_names(at) == ["Cicaplast Baume B5+", "Effaclar Duo+"]
+    assert url(at) == {"retailer": "notino"}
+    # the cards still show every shop's prices
+    assert '<span class="bc-from">de la</span> 74,50 lei' in card_markup(at)[1]
+    at.multiselect(key="retailers").select("emag").run()
+    assert len(card_names(at)) == 3
+    assert url(at) == {"retailer": "notino,emag"}
+    assert not at.button(key="reset_filters").disabled
+    at.button(key="reset_filters").click().run()
+    assert at.multiselect(key="retailers").value == []
+    assert url(at) == {}
+
+
+def test_shop_filter_from_a_link(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    at = run_app({"retailer": "notino,nu-exista"})  # unknown shops are dropped
+    assert not at.exception
+    assert at.multiselect(key="retailers").value == ["notino"]
+    assert card_names(at) == ["Cicaplast Baume B5+", "Effaclar Duo+"]
+    assert url(at) == {"retailer": "notino"}
+    at.button(key=f"open-{shop['duo']}").click().run()
+    at.button[0].click().run()  # back to the results keeps the shop
+    assert at.multiselect(key="retailers").value == ["notino"]

@@ -80,6 +80,23 @@ def test_empty_params_are_not_sent(api: ApiClient, product_id: int) -> None:
     assert api.search_products("", brand="", category=None).total == 1
 
 
+def test_retailers_are_sent_as_repeated_params(api: ApiClient, product_id: int) -> None:
+    with respx.mock(assert_all_called=True) as router:
+        route = router.get("http://api.test/api/products").mock(
+            return_value=httpx.Response(
+                200, json={"total": 0, "page": 1, "page_size": 24, "items": []}
+            )
+        )
+        with ApiClient("http://api.test/api/") as remote:
+            remote.search_products(retailers=["esteto", "probeauty"])
+            remote.search_products(retailers=[])
+    first, second = (call.request.url.params for call in route.calls)
+    assert first.get_list("retailer") == ["esteto", "probeauty"]
+    assert "retailer" not in second
+    assert api.search_products(retailers=["notino"]).total == 1
+    assert api.search_products(retailers=["emag"]).total == 0
+
+
 def test_not_found(api: ApiClient) -> None:
     with pytest.raises(NotFound) as err:
         api.get_product(12345)

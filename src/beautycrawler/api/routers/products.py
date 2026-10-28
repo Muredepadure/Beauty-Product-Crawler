@@ -7,6 +7,7 @@
 Search (`q`) is diacritic- and case-insensitive: every word of the query must occur in
 the product's normalized name or its brand ("cremă effaclar" finds "Effaclar ... Crema").
 `brand` accepts any known spelling or alias ("LRP", "la roche posay").
+`retailer` (repeatable, slugs) keeps the products listed by at least one of those shops.
 """
 
 import enum
@@ -29,7 +30,7 @@ from beautycrawler.api.schemas import (
     ProductSummary,
     RetailerRef,
 )
-from beautycrawler.db.models import Brand, Offer, PriceHistory, Product
+from beautycrawler.db.models import Brand, Offer, PriceHistory, Product, Retailer
 from beautycrawler.normalization.brands import brand_key, canonical_brand
 from beautycrawler.normalization.text import fold
 
@@ -122,6 +123,13 @@ def list_products(
     in_stock: Annotated[
         bool, Query(description="Only products at least one retailer has in stock")
     ] = False,
+    retailer: Annotated[
+        list[str] | None,
+        Query(
+            description="Retailer slug; repeat for several. Only products with a listing "
+            "from at least one of them (price and store counts still cover every retailer)"
+        ),
+    ] = None,
     unlisted: Annotated[
         Unlisted,
         Query(
@@ -152,6 +160,14 @@ def list_products(
         conditions.append(stats.c.lowest_price <= max_price)
     if in_stock:
         conditions.append(stats.c.lowest_price.is_not(None))
+    slugs = sorted({slug.strip().lower() for slug in retailer or [] if slug.strip()})
+    if slugs:
+        listed_by = (
+            select(Offer.product_id)
+            .join(Retailer, Offer.retailer_id == Retailer.id)
+            .where(Retailer.slug.in_(slugs), Offer.product_id.is_not(None))
+        )
+        conditions.append(Product.id.in_(listed_by))
     if hide_unlisted(session, unlisted):
         conditions.append(stats.c.offer_count.is_not(None))
 

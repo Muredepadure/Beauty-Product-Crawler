@@ -291,6 +291,7 @@ SEARCH_DEFAULTS: dict[str, object] = {
     "min_lei": 0.0,
     "max_lei": 0.0,
     "in_stock": False,
+    "retailers": (),  # retailer slugs; () = every shop
     "sort": "name",
     "page": 1,
 }
@@ -303,6 +304,7 @@ SEARCH_URL_KEYS: dict[str, str] = {
     "min_lei": "min",
     "max_lei": "max",
     "in_stock": "in_stock",
+    "retailers": "retailer",  # comma-separated slugs
     "sort": "sort",
     "page": "page",
 }
@@ -324,6 +326,8 @@ def search_state_to_params(state: Mapping[str, object]) -> dict[str, str]:
             continue
         if isinstance(value, bool):
             text = "1"
+        elif isinstance(value, list | tuple):
+            text = ",".join(str(v).strip() for v in value if str(v).strip())
         elif isinstance(value, float):
             text = _url_number(value)
         else:
@@ -352,6 +356,8 @@ def search_state_from_params(params: Mapping[str, str]) -> dict[str, object]:
     state["min_lei"] = _parse_lei(get["min_lei"])
     state["max_lei"] = _parse_lei(get["max_lei"])
     state["in_stock"] = get["in_stock"].lower() in ("1", "true", "da")
+    slugs = (s.strip().lower() for s in get["retailers"].split(","))
+    state["retailers"] = tuple(dict.fromkeys(s for s in slugs if s))
     if get["sort"] in SORT_LABELS:
         state["sort"] = get["sort"]
     if get["page"].isdigit() and int(get["page"]) >= 1:
