@@ -12,7 +12,7 @@ Blockers / questions for owner: <or "none">
 
 ---
 
-## 2026-10-28 (nightly) — claude/nightly-2026-10-28-P12.1 — PR (see below)
+## 2026-10-28 (nightly) — claude/nightly-2026-10-28-P12.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/11
 Done:
 - P12.1: the search (text, filters, sort, page) lives in the URL; "Înapoi la rezultate" and the
   browser back/forward arrows restore it, results URLs can be shared. Plain `st.query_params`
