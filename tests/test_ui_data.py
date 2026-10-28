@@ -20,6 +20,8 @@ from beautycrawler.ui_data import (
     api_error_message,
     card_badges,
     card_html,
+    common_caption,
+    common_hint,
     discount_pct,
     empty_hint,
     format_pct,
@@ -584,6 +586,7 @@ def test_search_state_round_trip() -> None:
         "max_lei": 120.0,
         "in_stock": True,
         "retailers": ("profihairshop", "xpertbeauty"),
+        "common": True,
         "sort": "price_asc",
         "page": 3,
     }
@@ -596,6 +599,7 @@ def test_search_state_round_trip() -> None:
         "max": "120",
         "in_stock": "1",
         "retailer": "profihairshop,xpertbeauty",
+        "common": "1",
         "sort": "price_asc",
         "page": "3",
     }
@@ -623,6 +627,8 @@ def test_blank_values_stay_out_of_the_url() -> None:
         ({"q": "  ser  "}, {"q": "ser"}),
         ({"retailer": "Esteto, ,esteto,probeauty"}, {"retailers": ("esteto", "probeauty")}),
         ({"retailer": ","}, {}),
+        ({"common": "true"}, {"common": True}),
+        ({"common": "nu"}, {}),
         ({"utm_source": "x"}, {}),
     ],
 )
@@ -630,3 +636,24 @@ def test_bad_or_odd_params_fall_back_to_defaults(
     params: dict[str, str], changed: dict[str, object]
 ) -> None:
     assert search_state_from_params(params) == {**SEARCH_DEFAULTS, **changed}
+
+
+# --- P12.3: products sold in several shops -------------------------------------------
+
+
+def test_common_caption() -> None:
+    assert common_caption(0) == "Produse vândute în cel puțin 2 magazine"
+    assert common_caption(1) == ""
+    assert common_caption(3) == "Produse vândute în toate cele 3 magazine alese"
+    assert common_caption(20) == "Produse vândute în toate cele 20 de magazine alese"
+
+
+def test_common_hint() -> None:
+    assert common_hint(1) is None
+    hint = common_hint(2)
+    assert hint is not None
+    assert hint.startswith("Niciun produs nu se vinde în toate cele 2 magazine alese.")
+    assert "Alege mai puține magazine" in hint
+    hint = common_hint(0)
+    assert hint is not None
+    assert hint.startswith("Niciun produs nu se vinde încă în cel puțin 2 magazine.")

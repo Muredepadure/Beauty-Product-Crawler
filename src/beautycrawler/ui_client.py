@@ -100,6 +100,7 @@ class ApiClient:
         max_price_bani: int | None = None,
         in_stock: bool = False,
         retailers: Sequence[str] | None = None,
+        common: bool = False,
         unlisted: str = "show",
     ) -> ProductPage:
         params = {
@@ -113,6 +114,7 @@ class ApiClient:
             "max_price": max_price_bani,
             "in_stock": "true" if in_stock else None,
             "retailer": list(retailers) if retailers else None,  # repeated: ?retailer=a&retailer=b
+            "common": "true" if common else None,
             "unlisted": None if unlisted == "show" else unlisted,
         }
         return self._model(ProductPage, "/products", params)

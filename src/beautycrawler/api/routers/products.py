@@ -7,7 +7,8 @@
 Search (`q`) is diacritic- and case-insensitive: every word of the query must occur in
 the product's normalized name or its brand ("cremă effaclar" finds "Effaclar ... Crema").
 `brand` accepts any known spelling or alias ("LRP", "la roche posay").
-`retailer` (repeatable, slugs) keeps the products listed by at least one of those shops.
+`retailer` (repeatable, slugs) keeps the products listed by at least one of those shops;
+with `common=true`, by every one of them (no `retailer`: by at least two shops).
 """
 
 import enum
@@ -130,6 +131,13 @@ def list_products(
             "from at least one of them (price and store counts still cover every retailer)"
         ),
     ] = None,
+    common: Annotated[
+        bool,
+        Query(
+            description="Only products listed by every `retailer` given; without `retailer`, "
+            "products listed by at least 2 retailers"
+        ),
+    ] = False,
     unlisted: Annotated[
         Unlisted,
         Query(
@@ -167,7 +175,13 @@ def list_products(
             .join(Retailer, Offer.retailer_id == Retailer.id)
             .where(Retailer.slug.in_(slugs), Offer.product_id.is_not(None))
         )
+        if common:  # listed by all of them: as many distinct shops as slugs asked for
+            listed_by = listed_by.group_by(Offer.product_id).having(
+                func.count(func.distinct(Offer.retailer_id)) == len(slugs)
+            )
         conditions.append(Product.id.in_(listed_by))
+    elif common:
+        conditions.append(stats.c.retailer_count >= 2)
     if hide_unlisted(session, unlisted):
         conditions.append(stats.c.offer_count.is_not(None))
 

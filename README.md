@@ -166,7 +166,7 @@ All prices are integer **bani** (1 RON = 100 bani); times are UTC.
 | Endpoint | Returns |
 |---|---|
 | `GET /healthz` | `{"status": "ok"}` |
-| `GET /api/products` | Product search. `q` (every word must match name or brand; case/diacritics ignored), `brand` (any alias), `category`, `min_price`/`max_price` (bani, on the lowest in-stock price), `in_stock=true`, `retailer` (slug, repeatable: products listed by any of those shops; prices and counts still cover every shop), `unlisted` = `show` (default) \| `hide` \| `auto` (hide products without listings once any product has one), `sort` = `name` \| `price_asc` \| `price_desc` \| `retailers`, `page`, `page_size` (1–100) |
+| `GET /api/products` | Product search. `q` (every word must match name or brand; case/diacritics ignored), `brand` (any alias), `category`, `min_price`/`max_price` (bani, on the lowest in-stock price), `in_stock=true`, `retailer` (slug, repeatable: products listed by any of those shops; prices and counts still cover every shop), `common=true` (with `retailer`: listed by every one of those shops; without: by at least 2 shops), `unlisted` = `show` (default) \| `hide` \| `auto` (hide products without listings once any product has one), `sort` = `name` \| `price_asc` \| `price_desc` \| `retailers`, `page`, `page_size` (1–100) |
 | `GET /api/products/{id}` | The product with every retailer's offer: in stock by price first, `is_cheapest` on the lowest in-stock price |
 | `GET /api/products/{id}/history` | Price history per offer (`days` window). Points exist only on change: draw steps |
 | `GET /api/retailers` | Tracked retailers with offer/product counts (`active` filter) |
@@ -184,7 +184,8 @@ Run it from the repository root: Streamlit reads the theme (accent colour, light
 mode) from `.streamlit/config.toml` in the current directory. Shared names, colours and
 the one custom CSS block live in `src/beautycrawler/ui_style.py`.
 
-- **Caută produse**: search with brand/shop/category/price/stock filters and product cards;
+- **Caută produse**: search with brand/shop/category/price/stock filters ("Doar produse
+  comune": only products sold in every chosen shop, or in 2+ shops) and product cards;
   a product page (`?product=<id>`, shareable) with the price table across retailers
   (cheapest highlighted, links out) and the price-history chart. The search text,
   filters, sort and page are kept in the URL (`?q=…&brand=…&page=2`), so results can be

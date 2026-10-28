@@ -275,6 +275,31 @@ def empty_hint(query: str | None, active_filters: int) -> str:
     return "Încă nu există produse în catalog."
 
 
+def common_caption(shops: int) -> str:
+    """What "Doar produse comune" (P12.3) keeps, given how many shops are chosen."""
+    if shops == 1:
+        return ""  # the same as the plain shop filter
+    if shops:
+        return f"Produse vândute în toate cele {stores_label(shops)} alese"
+    return "Produse vândute în cel puțin 2 magazine"
+
+
+def common_hint(shops: int) -> str | None:
+    """Empty-state hint when "Doar produse comune" finds no overlap (None with one shop,
+    where the toggle changes nothing)."""
+    if shops == 1:
+        return None
+    if shops:
+        return (
+            f"Niciun produs nu se vinde în toate cele {stores_label(shops)} alese. "
+            "Alege mai puține magazine sau oprește „Doar produse comune”."
+        )
+    return (
+        "Niciun produs nu se vinde încă în cel puțin 2 magazine. "
+        "Oprește „Doar produse comune” ca să vezi toate produsele."
+    )
+
+
 def lei_to_bani(lei: float | None) -> int | None:
     """A price typed in lei (0 or empty = no limit) as integer bani."""
     if not lei or lei <= 0:
@@ -292,6 +317,7 @@ SEARCH_DEFAULTS: dict[str, object] = {
     "max_lei": 0.0,
     "in_stock": False,
     "retailers": (),  # retailer slugs; () = every shop
+    "common": False,  # only products sold in every chosen shop (none chosen: in 2+ shops)
     "sort": "name",
     "page": 1,
 }
@@ -305,6 +331,7 @@ SEARCH_URL_KEYS: dict[str, str] = {
     "max_lei": "max",
     "in_stock": "in_stock",
     "retailers": "retailer",  # comma-separated slugs
+    "common": "common",
     "sort": "sort",
     "page": "page",
 }
@@ -356,6 +383,7 @@ def search_state_from_params(params: Mapping[str, str]) -> dict[str, object]:
     state["min_lei"] = _parse_lei(get["min_lei"])
     state["max_lei"] = _parse_lei(get["max_lei"])
     state["in_stock"] = get["in_stock"].lower() in ("1", "true", "da")
+    state["common"] = get["common"].lower() in ("1", "true", "da")
     slugs = (s.strip().lower() for s in get["retailers"].split(","))
     state["retailers"] = tuple(dict.fromkeys(s for s in slugs if s))
     if get["sort"] in SORT_LABELS:

@@ -427,3 +427,50 @@ def test_filter_retailer_combines_with_other_filters(
         catalogue["revita"],
         catalogue["duo"],
     ]
+
+
+# --- P12.3: products sold in several shops -------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("retailers", "expected"),
+    [
+        ([], ["duo", "revita"]),  # no shop chosen: listed by at least 2 shops
+        (["notino"], ["cica", "duo"]),  # one shop: same as the plain shop filter
+        (["notino", "emag"], ["duo"]),
+        (["emag", "drmax"], ["duo", "revita"]),  # duo's drmax offer is out of stock: listed
+        (["notino", "emag", "drmax"], ["duo"]),
+        (["notino", "NOTINO", "emag"], ["duo"]),  # duplicates count once
+        (["notino", "nu-exista"], []),  # nobody is listed by an unknown shop
+    ],
+)
+def test_common_products(
+    client: TestClient, catalogue: dict[str, int], retailers: list[str], expected: list[str]
+) -> None:
+    body = client.get("/api/products", params={"retailer": retailers, "common": True}).json()
+    assert ids(body) == [catalogue[k] for k in expected]
+    assert body["total"] == len(expected)
+
+
+def test_common_counts_shops_not_offers(
+    client: TestClient, catalogue: dict[str, int], api_session: Session
+) -> None:
+    """Two listings (e.g. two sizes or sellers) at one shop are still one shop."""
+    notino = api_session.query(Retailer).filter_by(slug="notino").one()
+    cica = api_session.get(Product, catalogue["cica"])
+    api_session.add(
+        Offer(product=cica, retailer=notino, url="https://notino.ro/2", title="x", price_bani=1)
+    )
+    api_session.commit()
+    body = client.get("/api/products", params={"common": True}).json()
+    assert ids(body) == [catalogue["duo"], catalogue["revita"]]
+    body = client.get(
+        "/api/products", params={"common": True, "retailer": ["notino", "emag"]}
+    ).json()
+    assert ids(body) == [catalogue["duo"]]
+
+
+def test_common_sorted_by_retailers(client: TestClient, catalogue: dict[str, int]) -> None:
+    body = client.get("/api/products", params={"common": True, "sort": "retailers"}).json()
+    assert ids(body) == [catalogue["duo"], catalogue["revita"]]
+    assert [p["retailer_count"] for p in body["items"]] == [3, 2]

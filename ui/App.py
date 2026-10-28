@@ -32,6 +32,8 @@ from beautycrawler.ui_data import (
     active_filter_count,
     api_error_message,
     card_html,
+    common_caption,
+    common_hint,
     empty_hint,
     format_pct,
     freshness_text,
@@ -189,6 +191,7 @@ FILTER_DEFAULTS: dict[str, object] = {
     "max_lei": 0.0,
     "in_stock": False,
     "retailers": (),
+    "common": False,
 }
 
 
@@ -212,6 +215,16 @@ def shop_names() -> dict[str, str]:
         for r in sorted(retailers, key=lambda r: r.name.casefold())
         if r.product_count
     }
+
+
+def common_changed() -> None:
+    """Most shops first while "Doar produse comune" is on, unless another sort was chosen."""
+    reset_page()
+    sort = st.session_state.get("sort", "name")
+    if st.session_state.get("common") and sort == "name":
+        st.session_state["sort"] = "retailers"
+    elif not st.session_state.get("common") and sort == "retailers":
+        st.session_state["sort"] = "name"
 
 
 def reset_filters() -> None:
@@ -250,6 +263,13 @@ def search_filters() -> dict[str, Any]:
             label_visibility="collapsed",
             on_change=reset_page,
         )
+        common = st.toggle(
+            "Doar produse comune",
+            key="common",
+            help="Cu magazine alese: doar produsele vândute în toate. "
+            "Fără magazine alese: doar produsele vândute în cel puțin 2 magazine.",
+            on_change=common_changed,
+        )
         filter_group("Preț (lei)")
         low, high = st.columns(2)
         min_lei = low.number_input(
@@ -277,6 +297,7 @@ def search_filters() -> dict[str, Any]:
             "max_price_bani": lei_to_bani(max_lei),
             "in_stock": in_stock,
             "retailers": retailers or None,
+            "common": common,
         }
         st.button(
             "Resetează filtrele",
@@ -290,10 +311,13 @@ def search_filters() -> dict[str, Any]:
 
 def empty_state(query: str | None, filters: dict[str, Any]) -> None:
     active = active_filter_count(filters)
+    hint = empty_hint(query, active)
+    if filters.get("common"):
+        hint = common_hint(len(filters.get("retailers") or ())) or hint
     st.markdown(
         '<div class="bc-empty"><div class="bc-empty-icon" aria-hidden="true">🔍</div>'
         '<div class="bc-empty-title">Niciun produs găsit</div>'
-        f'<div class="bc-empty-hint">{escape(empty_hint(query, active))}</div></div>',
+        f'<div class="bc-empty-hint">{escape(hint)}</div></div>',
         unsafe_allow_html=True,
     )
     if active:
@@ -339,6 +363,8 @@ def search_page(api: ApiClient) -> None:
         empty_state(q, filters)
         return
     count_col.subheader(products_label(results.total))
+    if filters["common"] and (caption := common_caption(len(filters["retailers"] or ()))):
+        count_col.caption(caption)
     columns = st.columns(3)
     for i, product in enumerate(results.items):
         with columns[i % 3]:

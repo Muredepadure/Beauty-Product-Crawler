@@ -573,3 +573,52 @@ def test_shop_filter_from_a_link(ui_api: respx.MockRouter, shop: dict[str, int])
     at.button(key=f"open-{shop['duo']}").click().run()
     at.button[0].click().run()  # back to the results keeps the shop
     assert at.multiselect(key="retailers").value == ["notino"]
+
+
+# --- P12.3: products sold in several shops -------------------------------------------
+
+
+def test_common_products_without_shops(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    at = run_app()
+    at.toggle(key="common").set_value(True).run()
+    # both sold by notino and emag (a tie in shops: by id); the cleanser only by emag
+    assert card_names(at) == ["Effaclar Duo+", "Cicaplast Baume B5+"]
+    assert at.selectbox(key="sort").value == "retailers"  # most shops first
+    assert "Produse vândute în cel puțin 2 magazine" in [c.value for c in at.caption]
+    assert url(at) == {"common": "1", "sort": "retailers"}
+    at.toggle(key="common").set_value(False).run()
+    assert at.selectbox(key="sort").value == "name"
+    assert url(at) == {}
+
+
+def test_common_keeps_a_chosen_sort(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    at = run_app()
+    at.selectbox(key="sort").select("price_asc").run()
+    at.toggle(key="common").set_value(True).run()
+    assert at.selectbox(key="sort").value == "price_asc"
+    assert card_names(at) == ["Cicaplast Baume B5+", "Effaclar Duo+"]  # 55 lei, 74,50 lei
+
+
+def test_common_products_in_chosen_shops(
+    ui_api: respx.MockRouter, shop: dict[str, int], api_session: Session
+) -> None:
+    cerave = api_session.query(Brand).filter_by(name="CeraVe").one()
+    serum = Product(brand=cerave, name="Ser Hialuronic", normalized_name="ser hialuronic")
+    api_session.add(serum)
+    api_session.flush()
+    elefant = Retailer(slug="elefant", name="Elefant", domain="elefant.ro")
+    _observe(api_session, elefant, serum, "https://elefant.ro/ser", [(10, 6_000, True)])
+    api_session.commit()
+    at = run_app({"retailer": "notino,emag", "common": "1"})
+    assert not at.exception
+    assert at.toggle(key="common").value is True
+    assert card_names(at) == ["Cicaplast Baume B5+", "Effaclar Duo+"]
+    assert "Produse vândute în toate cele 2 magazine alese" in [c.value for c in at.caption]
+    at.multiselect(key="retailers").select("elefant").run()  # nothing is sold in all three
+    text = markdown(at)
+    assert "Niciun produs găsit" in text
+    assert "Niciun produs nu se vinde în toate cele 3 magazine alese." in text
+    assert url(at) == {"retailer": "notino,emag,elefant", "common": "1"}
+    at.button(key="reset_filters_empty").click().run()
+    assert at.toggle(key="common").value is False
+    assert len(card_names(at)) == 4
