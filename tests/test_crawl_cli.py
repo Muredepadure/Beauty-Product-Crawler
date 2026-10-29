@@ -652,3 +652,17 @@ async def test_a_brand_filtered_run_marks_nothing_missed(
     assert (summary.stats.offers, summary.stats.skipped_brands) == (1, 1)
     assert summary.missed is None
     assert _vanished(engine).missed_runs == 0
+
+
+def test_until_in_the_past_skips_every_retailer(
+    mock: respx.MockRouter,
+    db: tuple[str, Engine],
+    settings: Settings,
+    fake_time: FakeTime,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    url, engine = db
+    argv = ["run", "--retailer", "clitest", "--database-url", url, "--until", "2026-01-01T07:00"]
+    assert main(argv, fetcher_factory(settings, fake_time)) == 0
+    assert "clitest: skipped: time limit reached" in capsys.readouterr().out
+    assert count(engine, Offer) == 0

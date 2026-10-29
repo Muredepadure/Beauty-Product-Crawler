@@ -6,8 +6,9 @@
 # - --skip-seen-hours 144: pages collected in the last 6 days are skipped, so a catalogue
 #   too big for one night continues the next night, and every product is refreshed about
 #   once a week.
-# - --until 07:00: stops cleanly between pages in the morning; shops not reached wait
-#   for the next night.
+# - --until <next 07:00>: stops cleanly between pages in the morning; shops not reached
+#   wait for the next night. The date and time are fixed once here, so a second run that
+#   starts after 07:00 stops at once instead of going on until the next morning.
 # - --match links new listings to catalogue products: at the start (anything an interrupted
 #   night left), every 5 minutes during the crawl, and at the end.
 # - --keep-awake asks Windows not to sleep or turn the screen off until the crawl ends.
@@ -33,7 +34,9 @@ $env:PYTHONUNBUFFERED = "1"
 # avoid quoting trouble with the spaces in them.
 $env:CRAWL_PY = $python
 $env:CRAWL_LOG = $log
-$common = ' --skip-seen-hours 144 --until 07:00 --match --keep-awake'
+$until = (Get-Date).Date.AddHours(7)
+if ($until -le (Get-Date)) { $until = $until.AddDays(1) }
+$common = " --skip-seen-hours 144 --until $($until.ToString('yyyy-MM-ddTHH:mm')) --match --keep-awake"
 
 function Invoke-Crawl([string] $name, [string] $options) {
     $env:CRAWL_REPORT = Join-Path $logs "crawl-$stamp-$name.json"

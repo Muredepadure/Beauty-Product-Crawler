@@ -43,13 +43,21 @@ FetcherFactory = Callable[[], PoliteFetcher]
 STILL_WAITING = (MatchMethod.AWAITING_REVIEW.value, MatchMethod.UNMATCHED.value)
 
 
-def deadline_from(hhmm: str, now: datetime | None = None) -> float:
-    """`time.monotonic()` value at the next local `HH:MM` (today, or tomorrow if past)."""
-    hour, minute = (int(part) for part in hhmm.split(":", 1))
+def deadline_from(until: str, now: datetime | None = None) -> float:
+    """`time.monotonic()` value at `until`: a local `HH:MM` (the next one: today, or
+    tomorrow if past) or a local date and time `YYYY-MM-DDTHH:MM` (may be in the past:
+    the deadline has then passed already). Several runs that must end at the same time
+    take the date form, so a run that starts just after it doesn't go on until the
+    next day."""
     now = now or datetime.now().astimezone()
-    target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    if target <= now:
-        target += timedelta(days=1)
+    if "T" in until:
+        target = datetime.fromisoformat(until)
+        target = target.astimezone() if target.tzinfo is None else target
+    else:
+        hour, minute = (int(part) for part in until.split(":", 1))
+        target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if target <= now:
+            target += timedelta(days=1)
     return time.monotonic() + (target - now).total_seconds()
 
 
@@ -92,7 +100,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--until",
         metavar="HH:MM",
-        help="local time to stop (between pages); retailers not reached are skipped",
+        help="local time (HH:MM or YYYY-MM-DDTHH:MM) to stop, between pages; retailers "
+        "not reached are skipped",
     )
 
     schedule = sub.add_parser("schedule", help="show or set per-retailer crawl intervals")
@@ -211,7 +220,7 @@ def main(argv: list[str] | None = None, fetcher_factory: FetcherFactory | None =
     try:
         args.deadline = deadline_from(args.until) if args.until else None
     except ValueError:
-        print("--until must be a time like 07:00", file=sys.stderr)
+        print("--until must be a time like 07:00 or 2026-10-30T07:00", file=sys.stderr)
         return 2
     args.brands = tuple(b.strip() for b in (args.only_brands or "").split(",") if b.strip())
     slugs = sorted(spiders) if args.all else list(dict.fromkeys(args.retailer))

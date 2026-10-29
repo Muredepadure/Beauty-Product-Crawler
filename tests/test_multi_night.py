@@ -169,6 +169,18 @@ def test_deadline_from_picks_the_next_occurrence(monkeypatch: pytest.MonkeyPatch
         deadline_from("soon", now=morning)
 
 
+def test_deadline_from_a_date_and_time_may_have_passed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("beautycrawler.crawler.__main__.time.monotonic", lambda: 0.0)
+    tz = timezone(timedelta(hours=2))
+    evening = datetime(2026, 10, 28, 23, 0, tzinfo=tz)
+    assert deadline_from("2026-10-29T07:00+02:00", now=evening) == 8 * 3600
+    # A second run starting at 07:00:08 must stop at once, not the next morning.
+    just_after = datetime(2026, 10, 29, 7, 0, 8, tzinfo=tz)
+    assert deadline_from("2026-10-29T07:00+02:00", now=just_after) == -8
+    with pytest.raises(ValueError):
+        deadline_from("2026-13-01T07:00", now=evening)
+
+
 def test_brand_token_ignores_case_accents_and_punctuation() -> None:
     assert brand_token("L`OREAL PROFESSIONNEL") == "lorealprofessionnel"
     assert brand_token("Kérastase") == "kerastase"
