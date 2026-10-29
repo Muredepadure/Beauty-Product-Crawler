@@ -18,6 +18,7 @@ from beautycrawler.crawler.spider import (
     RATE_LIMIT_GIVE_UP_AFTER,
     CrawlStats,
     JsonLdSpider,
+    brand_token,
     page_key,
 )
 
@@ -166,3 +167,46 @@ def test_deadline_from_picks_the_next_occurrence(monkeypatch: pytest.MonkeyPatch
     assert deadline_from("07:00", now=morning) == 30 * 60  # later today
     with pytest.raises(ValueError):
         deadline_from("soon", now=morning)
+
+
+def test_brand_token_ignores_case_accents_and_punctuation() -> None:
+    assert brand_token("L`OREAL PROFESSIONNEL") == "lorealprofessionnel"
+    assert brand_token("Kérastase") == "kerastase"
+    assert brand_token("l-oreal-serie-expert") == "lorealserieexpert"
+
+
+async def test_brand_filter_skips_other_brands_before_fetching(
+    fetcher: PoliteFetcher, mock: respx.MockRouter
+) -> None:
+    robots = f"User-agent: *\nSitemap: {BASE}/sitemap.xml\n"
+    mock.get(f"{BASE}/robots.txt").mock(return_value=httpx.Response(200, text=robots))
+    urls = [
+        f"{BASE}/p/sampon-wella-professionals-500ml",
+        f"{BASE}/p/masca-l-oreal-professionnel-250ml",
+        f"{BASE}/p/kerastase-elixir-ultime",
+        f"{BASE}/p/oja-opi-red",
+    ]
+    mock.get(f"{BASE}/sitemap.xml").mock(return_value=httpx.Response(200, text=urlset(*urls)))
+    pages = [mock.get(u).mock(return_value=httpx.Response(200, text=PRODUCT)) for u in urls]
+
+    spider = NightSpider(fetcher, brands=("Wella", "L'Oréal", "Kerastase"))
+    assert [u async for u in spider.discover()] == urls[:3]
+    assert spider.skipped_brands == 1
+    assert not pages[3].called  # the OPI page is never requested
+
+
+async def test_brand_filter_drops_offers_of_another_brand(
+    fetcher: PoliteFetcher, mock: respx.MockRouter
+) -> None:
+    # The URL names Wella, but the page's brand (La Roche-Posay) doesn't: dropped.
+    robots = f"User-agent: *\nSitemap: {BASE}/sitemap.xml\n"
+    mock.get(f"{BASE}/robots.txt").mock(return_value=httpx.Response(200, text=robots))
+    url = f"{BASE}/p/accesoriu-compatibil-wella"
+    mock.get(f"{BASE}/sitemap.xml").mock(return_value=httpx.Response(200, text=urlset(url)))
+    mock.get(url).mock(return_value=httpx.Response(200, text=PRODUCT))
+    stats = CrawlStats()
+    offers = [o async for o in NightSpider(fetcher, brands=("wella",)).crawl(stats=stats)]
+    assert offers == []
+    assert stats.skipped_brands == 1
+    # Without a filter the same page gives its offer.
+    assert len([o async for o in NightSpider(fetcher).crawl()]) == 1

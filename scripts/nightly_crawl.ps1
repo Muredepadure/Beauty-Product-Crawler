@@ -1,6 +1,8 @@
 # Nightly crawl on the owner's PC (Windows Task Scheduler runs this at 23:00).
 #
-# - Shops are crawled in priority order: Profihairshop and XpertBeauty first.
+# - Shops are crawled in priority order: Profihairshop and XpertBeauty first, and from
+#   those two only Wella and L'Oreal (incl. Kerastase) products (owner, 2026-10-29);
+#   then the other shops, all brands, if time is left.
 # - --skip-seen-hours 144: pages collected in the last 6 days are skipped, so a catalogue
 #   too big for one night continues the next night, and every product is refreshed about
 #   once a week.
@@ -20,7 +22,6 @@ $logs = Join-Path $root "logs"
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
 $stamp = Get-Date -Format "yyyy-MM-dd"
 $log = Join-Path $logs "crawl-$stamp.log"
-$report = Join-Path $logs "crawl-$stamp.json"
 
 $python = Join-Path $root ".venv\Scripts\python.exe"
 $env:PYTHONIOENCODING = "utf-8"
@@ -32,11 +33,15 @@ $env:PYTHONUNBUFFERED = "1"
 # avoid quoting trouble with the spaces in them.
 $env:CRAWL_PY = $python
 $env:CRAWL_LOG = $log
-$env:CRAWL_REPORT = $report
-$crawl = '"%CRAWL_PY%" -m beautycrawler.crawler -v run' +
-    ' --retailer profihairshop --retailer xpertbeauty --retailer parfimo' +
-    ' --retailer esteto --retailer probeauty --retailer beautylounge' +
-    ' --skip-seen-hours 144 --until 07:00 --match --keep-awake' +
-    ' --summary-json "%CRAWL_REPORT%" >> "%CRAWL_LOG%" 2>&1'
-& cmd.exe /d /c $crawl
-"=== $(Get-Date -Format s) nightly crawl finished (exit code $LASTEXITCODE)" | Out-File -FilePath $log -Append -Encoding utf8
+$common = ' --skip-seen-hours 144 --until 07:00 --match --keep-awake'
+
+function Invoke-Crawl([string] $name, [string] $options) {
+    $env:CRAWL_REPORT = Join-Path $logs "crawl-$stamp-$name.json"
+    "=== $(Get-Date -Format s) $name crawl started" | Out-File -FilePath $log -Append -Encoding utf8
+    & cmd.exe /d /c ('"%CRAWL_PY%" -m beautycrawler.crawler -v run' + $options + $common +
+        ' --summary-json "%CRAWL_REPORT%" >> "%CRAWL_LOG%" 2>&1')
+    "=== $(Get-Date -Format s) $name crawl finished (exit code $LASTEXITCODE)" | Out-File -FilePath $log -Append -Encoding utf8
+}
+
+Invoke-Crawl "brands" ' --retailer profihairshop --retailer xpertbeauty --only-brands wella,loreal,kerastase'
+Invoke-Crawl "others" ' --retailer parfimo --retailer esteto --retailer probeauty --retailer beautylounge'

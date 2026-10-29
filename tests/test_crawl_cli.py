@@ -636,3 +636,19 @@ def test_offers_still_waiting_are_not_counted_once_per_pass(
     argv = ["run", "--retailer", "clitest", "--database-url", url, "--match"]
     assert main(argv, fetcher_factory(settings, fake_time)) == 0
     assert "matching: new_product 1, unmatched 3" in capsys.readouterr().out
+
+
+async def test_a_brand_filtered_run_marks_nothing_missed(
+    mock: respx.MockRouter, db: tuple[str, Engine], settings: Settings, fake_time: FakeTime
+) -> None:
+    _, engine = db
+    _add_vanished_offer(engine)  # stands in for a product of another brand
+    async with PoliteFetcher(settings, sleep=fake_time.sleep, clock=fake_time.clock) as f:
+        # /p/1 names "1" and the page's brand is La Roche-Posay: one offer found, /p/2
+        # filtered out. Offers were found, yet the crawl isn't complete: no misses.
+        summary = await runner.run_spider(
+            "clitest", make_session_factory(engine), f, brands=("1", "La Roche-Posay")
+        )
+    assert (summary.stats.offers, summary.stats.skipped_brands) == (1, 1)
+    assert summary.missed is None
+    assert _vanished(engine).missed_runs == 0

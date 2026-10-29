@@ -12,8 +12,9 @@ job running `crawl run --all --due` gives every retailer its own frequency.
 Multi-night crawls: `skip_seen_hours` leaves out pages whose listing was seen within that
 many hours, so a catalogue too big for one night continues where the last run stopped;
 `deadline` (a `clock()` value) ends the run between pages, and retailers not reached by
-then are skipped. Only a complete crawl (no limit, nothing skipped, not cut short)
-counts unseen listings as missed.
+then are skipped. `brands` limits the crawl to those brands (see `Spider`). Only a
+complete crawl (no limit, no brand filter, nothing skipped, not cut short) counts unseen
+listings as missed.
 
 Progress (for unattended night runs): every `progress_every` seconds a retailer's crawl
 commits, logs a `crawl_progress` line and calls `on_progress(session)` (the CLI links new
@@ -80,6 +81,11 @@ class RunSummary:
                 if self.stats.skipped_seen
                 else ""
             )
+            + (
+                f", {self.stats.skipped_brands} other brands (skipped)"
+                if self.stats.skipped_brands
+                else ""
+            )
             + (f", stopped early: {self.stats.stopped}" if self.stats.stopped else "")
             + (
                 f", {self.missed} not seen ({self.marked_out_of_stock} marked out of stock)"
@@ -107,6 +113,7 @@ class RunSummary:
             "marked_out_of_stock": self.marked_out_of_stock,
             "errors": list(self.stats.errors),
             "skipped_seen": self.stats.skipped_seen,
+            "skipped_brands": self.stats.skipped_brands,
             "stopped": self.stats.stopped,
         }
 
@@ -184,6 +191,7 @@ async def run_spider(
     clock: Callable[[], float] = time.monotonic,
     on_progress: ProgressHook | None = None,
     progress_every: float = PROGRESS_EVERY_SECONDS,
+    brands: tuple[str, ...] = (),
 ) -> RunSummary:
     """Crawl one retailer and upsert every offer. Commits in batches.
 
@@ -198,7 +206,7 @@ async def run_spider(
     with session_factory() as session:
         retailer = get_or_create_retailer(session, spider_cls)
         session.commit()
-        spider = spider_cls(fetcher, deadline=deadline, clock=clock)
+        spider = spider_cls(fetcher, deadline=deadline, clock=clock, brands=brands)
         if skip_seen_hours:
             seen = recently_seen_urls(session, retailer, skip_seen_hours)
             spider.skip_urls = frozenset(spider.page_key(u) for u in seen)
@@ -220,7 +228,10 @@ async def run_spider(
                 last_progress = time.monotonic()
                 _report_progress(slug, summary, session, on_progress)
         complete = (
-            limit is None and not summary.stats.skipped_seen and summary.stats.stopped is None
+            limit is None
+            and not brands
+            and not summary.stats.skipped_seen
+            and summary.stats.stopped is None
         )
         if complete and summary.stats.offers > 0:
             threshold = stale_after if stale_after is not None else get_settings().stale_after_runs
@@ -292,6 +303,7 @@ async def run_many(
     deadline: float | None = None,
     clock: Callable[[], float] = time.monotonic,
     on_progress: ProgressHook | None = None,
+    brands: tuple[str, ...] = (),
 ) -> RunReport:
     """Run retailers one after another; one failing retailer doesn't stop the others."""
     started_at = datetime.now(UTC)
@@ -326,6 +338,7 @@ async def run_many(
                 deadline=deadline,
                 clock=clock,
                 on_progress=on_progress,
+                brands=brands,
             )
         except Exception as exc:
             summary = RunSummary(retailer=slug, failed=f"{type(exc).__name__}: {exc}")

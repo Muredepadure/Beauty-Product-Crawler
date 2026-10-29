@@ -16,10 +16,17 @@ pages already seen recently (they are left out of discovery, so `limit` counts o
 work), `deadline` stops the crawl between pages at a set time, and a shop that keeps
 answering 429 after the fetcher's retries is given up for this run. A crawl cut short
 for any of these reasons sets `CrawlStats.stopped`.
+
+`brands` limits a crawl to some brands: a product URL whose last path segment names none
+of them is never fetched, and a parsed offer whose brand names none of them is dropped
+(an offer without a brand is kept, its URL already matched). Brands are compared as
+`brand_token`s, so "l-oreal", "L`OREAL PROFESSIONNEL" and "Kérastase" all match.
 """
 
 import logging
+import re
 import time
+import unicodedata
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
@@ -57,7 +64,14 @@ class CrawlStats:
     pages_without_offers: int = 0
     errors: list[str] = field(default_factory=list)
     skipped_seen: int = 0  # product URLs left out because they were seen recently
+    skipped_brands: int = 0  # product URLs/offers left out by the `brands` filter
     stopped: str | None = None  # why the crawl ended early (time limit, rate limited)
+
+
+def brand_token(text: str) -> str:
+    """Lowercase ASCII letters and digits only: "L`Oréal Professionnel" -> "lorealprofessionnel"."""
+    ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]", "", ascii_text.lower())
 
 
 class Spider(ABC):
@@ -73,12 +87,15 @@ class Spider(ABC):
         skip_urls: frozenset[str] = frozenset(),
         deadline: float | None = None,
         clock: Callable[[], float] = time.monotonic,
+        brands: tuple[str, ...] = (),
     ) -> None:
         self.fetcher = fetcher
+        self.brands = tuple(brand_token(b) for b in brands if brand_token(b))
         self.skip_urls = skip_urls  # self.page_key()s of pages not to fetch this run
         self.deadline = deadline  # `clock()` value after which no new page is fetched
         self.clock = clock
         self.skipped_seen = 0
+        self.skipped_brands = 0
 
     # ------------------------------------------------------------ to implement
 
@@ -95,6 +112,14 @@ class Spider(ABC):
         the URL the offer was stored under. Override when a shop's product data names a
         different URL than its sitemap (Profihairshop adds a category level)."""
         return page_key(url)
+
+    def names_wanted_brand(self, text: str | None) -> bool:
+        """Whether `text` (a URL slug or brand name) names one of `brands` (always True
+        without a brand filter)."""
+        if not self.brands:
+            return True
+        token = brand_token(text or "")
+        return any(b in token for b in self.brands)
 
     def is_wanted_sitemap(self, url: str) -> bool:
         """Whether to fetch this sitemap (root or child). Override to skip image, review
@@ -133,6 +158,10 @@ class Spider(ABC):
                 if url in seen_urls or not self.is_product_url(url):
                     continue
                 seen_urls.add(url)
+                slug = urlsplit(url).path.rstrip("/").rsplit("/", 1)[-1]
+                if not self.names_wanted_brand(slug):
+                    self.skipped_brands += 1
+                    continue
                 if self.skip_urls and self.page_key(url) in self.skip_urls:
                     self.skipped_seen += 1
                     continue
@@ -181,6 +210,7 @@ class Spider(ABC):
                     yield offer
         finally:
             stats.skipped_seen = self.skipped_seen
+            stats.skipped_brands = self.skipped_brands
 
     def _parse(self, url: str, text: str, final_url: str, stats: CrawlStats) -> list[ScrapedOffer]:
         try:
@@ -189,6 +219,10 @@ class Spider(ABC):
             stats.errors.append(f"{url}: parse error: {exc!r}")
             log.exception("%s: parse error on %s", self.slug, url)
             return []
+        if self.brands:
+            wanted = [o for o in offers if o.brand is None or self.names_wanted_brand(o.brand)]
+            self.skipped_brands += len(offers) - len(wanted)
+            offers = wanted
         if not offers:
             stats.pages_without_offers += 1
         stats.offers += len(offers)

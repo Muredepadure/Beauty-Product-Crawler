@@ -9,7 +9,8 @@
 Options for `run`: `--due` skips retailers crawled within their interval;
 `--match` links offers to products before the crawl (left over from an interrupted run),
 every few minutes during it and afterwards; `--keep-awake` stops Windows from sleeping
-while the run lasts;
+while the run lasts; `--only-brands wella,loreal` fetches only those brands' products
+(by URL, checked again on the page; other products' prices are left as they are);
 `--summary-json PATH` writes the run report; `--include-inactive` also crawls retailers
 marked inactive in the database. `--log-format json` (before the command) gives one JSON
 log object per line. Exit code 1 when any retailer failed.
@@ -66,6 +67,11 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--database-url", help="override DATABASE_URL")
     run.add_argument(
         "--match", action="store_true", help="link new offers to products (also during the run)"
+    )
+    run.add_argument(
+        "--only-brands",
+        metavar="B1,B2",
+        help="only products of these brands, comma-separated (e.g. wella,loreal,kerastase)",
     )
     run.add_argument(
         "--keep-awake", action="store_true", help="keep Windows from sleeping during the run"
@@ -171,6 +177,7 @@ async def _run(
                 skip_seen_hours=args.skip_seen_hours,
                 deadline=args.deadline,
                 on_progress=on_progress,
+                brands=args.brands,
             )
         if on_progress is not None:
             with factory() as session:
@@ -206,6 +213,7 @@ def main(argv: list[str] | None = None, fetcher_factory: FetcherFactory | None =
     except ValueError:
         print("--until must be a time like 07:00", file=sys.stderr)
         return 2
+    args.brands = tuple(b.strip() for b in (args.only_brands or "").split(",") if b.strip())
     slugs = sorted(spiders) if args.all else list(dict.fromkeys(args.retailer))
     unknown = [s for s in slugs if s not in spiders]
     if unknown:
