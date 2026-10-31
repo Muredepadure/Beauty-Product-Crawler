@@ -4,10 +4,12 @@
     python -m beautycrawler.matching list [--status pending|approved|rejected|all] [--limit N]
     python -m beautycrawler.matching approve CANDIDATE_ID
     python -m beautycrawler.matching reject CANDIDATE_ID [CANDIDATE_ID ...] [--no-rematch]
+    python -m beautycrawler.matching categorize [--all]
 
 `run` links unmatched offers to products (EAN, then fuzzy); unclear cases become
-candidates for `list` / `approve` / `reject`. The database schema must exist
-(`alembic upgrade head`).
+candidates for `list` / `approve` / `reject`. `categorize` gives products without a
+category one from their name (`--all`: every product, e.g. after the rules changed).
+The database schema must exist (`alembic upgrade head`).
 """
 
 import argparse
@@ -25,6 +27,7 @@ from beautycrawler.matching.review import (
     reject_candidate,
 )
 from beautycrawler.matching.service import MatchConfig, match_unmatched
+from beautycrawler.normalization.categories import categorize_products
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -51,6 +54,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-rematch",
         action="store_true",
         help="leave the offer unmatched when its last candidate is rejected",
+    )
+
+    categorize = sub.add_parser("categorize", help="give products a category from their name")
+    categorize.add_argument(
+        "--all", action="store_true", help="every product, not only those without a category"
     )
     return parser
 
@@ -100,6 +108,15 @@ def _run_command(args: argparse.Namespace, session: Session) -> int:
             print("No unmatched offers.")
         for method, n in sorted(counts.items()):
             print(f"{method:16} {n}")
+        return 0
+
+    if args.command == "categorize":
+        counts = categorize_products(session, recompute=args.all)
+        session.commit()
+        if not counts:
+            print("Every product already has a category.")
+        for category, n in counts.most_common():
+            print(f"{n:6}  {category}")
         return 0
 
     if args.command == "list":

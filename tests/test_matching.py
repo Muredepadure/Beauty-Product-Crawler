@@ -515,3 +515,9 @@ def test_match_unmatched_links_offers_across_retailers(
     assert len(session.scalars(select(Product)).all()) == 2
     # A second run has nothing new to do.
     assert match_unmatched(session) == {"unmatched": 1}
+
+
+def test_new_products_get_a_category(session: Session, retailers: dict[str, Retailer]) -> None:
+    offer = _offer(session, retailers["emag"], "Sampon La Roche-Posay Kerium 200 ml")
+    assert match_offer(session, offer).method is MatchMethod.NEW_PRODUCT
+    assert offer.product is not None and offer.product.category == "Șampon"

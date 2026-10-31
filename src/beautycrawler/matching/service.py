@@ -34,6 +34,7 @@ from beautycrawler.matching.keys import (
     score_pair,
 )
 from beautycrawler.normalization.brands import brand_key, canonical_brand
+from beautycrawler.normalization.categories import categorize
 from beautycrawler.normalization.text import fold
 
 MAX_CANDIDATES = 5  # review rows written per offer
@@ -200,6 +201,7 @@ def _new_product(session: Session, offer: Offer, size: tuple[Decimal, str] | Non
         normalized_name=fold(name),
         size_value=size[0] if size else None,
         size_unit=size[1] if size else None,
+        category=categorize(offer.title),
     )
     session.add(product)
     return product

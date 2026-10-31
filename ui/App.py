@@ -8,9 +8,10 @@ product links can be shared.
 
 The URL is the source of truth for the search (P12.1): the search text, filters, sort
 and page are kept in the query parameters (`?q=…&brand=…&page=2`) next to `product`.
-Streamlit pushes a browser history entry whenever the script changes `st.query_params`
-and reruns the script when the back/forward arrows change the URL, so those arrows move
-between result pages and product pages, and every results URL can be shared.
+Streamlit pushes a browser history entry whenever the script changes `st.query_params`;
+it doesn't rerun when the back/forward arrows change the URL, so a small script reloads
+the page then (`BACK_FORWARD_JS`, P13.2). The arrows move between result pages and
+product pages, and every results URL can be shared.
 """
 
 from html import escape
@@ -23,6 +24,7 @@ import streamlit as st
 
 from beautycrawler.api.schemas import ProductDetail, ProductSummary
 from beautycrawler.config import get_settings
+from beautycrawler.normalization.text import fold
 from beautycrawler.ui_client import ApiClient, ApiError, NotFound
 from beautycrawler.ui_data import (
     MARKET_LEGEND_HTML,
@@ -111,6 +113,7 @@ def load_search_from_url() -> None:
         return
     state = search_state_from_params(in_url)
     state["brand"] = state["brand"] or ALL_BRANDS
+    state["category"] = state["category"] or ALL_CATEGORIES
     state["retailers"] = list(state["retailers"])  # the multiselect wants a list
     for key, value in state.items():
         st.session_state[key] = value
@@ -121,6 +124,8 @@ def search_state() -> dict[str, object]:
     state = {key: st.session_state.get(key, default) for key, default in SEARCH_DEFAULTS.items()}
     if state["brand"] == ALL_BRANDS:
         state["brand"] = ""
+    if state["category"] == ALL_CATEGORIES:
+        state["category"] = ""
     return state
 
 
@@ -160,9 +165,22 @@ def footer() -> None:
         st.markdown(f'<div class="bc-footer">{escape(text)}</div>', unsafe_allow_html=True)
 
 
+# Streamlit adds a history entry when the script changes `st.query_params`, but it does
+# not rerun when the browser's back/forward arrows change the URL: the address changes
+# and the page stays. The URL holds the whole state, so reloading it is enough. Added once
+# per tab (the flag survives reruns, which re-render this element).
+BACK_FORWARD_JS = """<script>
+if (!window.__bcBackForward) {
+  window.__bcBackForward = true;
+  window.addEventListener("popstate", () => window.location.reload());
+}
+</script>"""
+
+
 def header() -> None:
     """Shared CSS and the slim app header shown above every page."""
     st.html(CSS)
+    st.html(BACK_FORWARD_JS, unsafe_allow_javascript=True)
     with st.container(key=HEADER_KEY, horizontal=True, gap="small"):
         st.markdown(header_title())
         st.caption(TAGLINE)
@@ -184,9 +202,10 @@ def product_card(product: ProductSummary) -> None:
 
 
 ALL_BRANDS = "Toate brandurile"
+ALL_CATEGORIES = "Toate categoriile"
 FILTER_DEFAULTS: dict[str, object] = {
     "brand": ALL_BRANDS,
-    "category": "",
+    "category": ALL_CATEGORIES,
     "min_lei": 0.0,
     "max_lei": 0.0,
     "in_stock": False,
@@ -197,10 +216,20 @@ FILTER_DEFAULTS: dict[str, object] = {
 
 @st.cache_data(ttl=600)
 def brand_names() -> list[str]:
+    """Every brand with listed products (all pages: there are hundreds)."""
     try:
-        return [b.name for b in get_client().list_brands(page_size=200, unlisted="auto").items]
+        return get_client().all_brand_names(unlisted="auto")
     except ApiError:
         return []
+
+
+@st.cache_data(ttl=600)
+def category_counts() -> dict[str, int]:
+    """Category -> number of listed products, in the categories' display order."""
+    try:
+        return {c.name: c.product_count for c in get_client().list_categories(unlisted="auto")}
+    except ApiError:
+        return {}
 
 
 @st.cache_data(ttl=600)
@@ -246,8 +275,18 @@ def search_filters() -> dict[str, Any]:
         if st.session_state.get("brand") not in brands:  # e.g. an old link
             st.session_state["brand"] = ALL_BRANDS
         brand = st.selectbox("Brand", brands, key="brand", on_change=reset_page)
-        category = st.text_input(
-            "Categorie", key="category", placeholder="ex. Seruri", on_change=reset_page
+        counts = category_counts()
+        categories = [ALL_CATEGORIES, *counts]
+        if st.session_state.get("category") not in categories:  # e.g. an old link
+            by_key = {fold(c): c for c in categories}
+            wanted = fold(str(st.session_state.get("category") or ""))
+            st.session_state["category"] = by_key.get(wanted, ALL_CATEGORIES)
+        category = st.selectbox(
+            "Categorie",
+            categories,
+            key="category",
+            format_func=lambda c: f"{c} ({counts[c]})" if c in counts else c,
+            on_change=reset_page,
         )
         filter_group("Magazine")
         shops = shop_names()
@@ -292,7 +331,7 @@ def search_filters() -> dict[str, Any]:
         in_stock = st.checkbox("Doar produse în stoc", key="in_stock", on_change=reset_page)
         filters = {
             "brand": None if brand == ALL_BRANDS else brand,
-            "category": category or None,
+            "category": None if category == ALL_CATEGORIES else category,
             "min_price_bani": lei_to_bani(min_lei),
             "max_price_bani": lei_to_bani(max_lei),
             "in_stock": in_stock,

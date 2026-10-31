@@ -15,6 +15,7 @@ from pydantic import BaseModel, TypeAdapter
 from beautycrawler.api.schemas import (
     BrandComparison,
     BrandPage,
+    CategoryOut,
     PriceDropList,
     ProductDetail,
     ProductHistory,
@@ -26,6 +27,7 @@ from beautycrawler.config import get_settings
 M = TypeVar("M", bound=BaseModel)
 
 _RETAILERS = TypeAdapter(list[RetailerOut])
+_CATEGORIES = TypeAdapter(list[CategoryOut])
 
 
 class ApiError(Exception):
@@ -138,6 +140,21 @@ class ApiClient:
             "unlisted": None if unlisted == "show" else unlisted,
         }
         return self._model(BrandPage, "/brands", params)
+
+    def all_brand_names(self, unlisted: str = "show") -> list[str]:
+        """Every brand name, by name: pages through `/brands` (at most 200 a page)."""
+        names: list[str] = []
+        page = 1
+        while True:
+            batch = self.list_brands(page=page, page_size=200, unlisted=unlisted)
+            names += [b.name for b in batch.items]
+            if not batch.items or len(names) >= batch.total:
+                return names
+            page += 1
+
+    def list_categories(self, unlisted: str = "show") -> list[CategoryOut]:
+        params = {"unlisted": None if unlisted == "show" else unlisted}
+        return _CATEGORIES.validate_python(self._get("/categories", params))
 
     def compare(self, brand: str, page: int = 1, page_size: int = 100) -> BrandComparison:
         params = {"brand": brand, "page": page, "page_size": page_size}

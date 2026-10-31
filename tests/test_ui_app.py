@@ -313,10 +313,48 @@ def test_brand_filter(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
     assert card_names(at) == ["Hydrating Cleanser"]
 
 
-def test_category_filter_ignores_diacritics(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+def test_category_filter_is_a_dropdown(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
     at = run_app()
-    at.text_input(key="category").input("ingrijirea tenului").run()
+    box = at.selectbox(key="category")
+    # Categories with listed products and their counts (the shop's are not in the fixed
+    # list, so they come after it, by name).
+    assert box.options == ["Toate categoriile", "Curățare (1)", "Îngrijirea tenului (2)"]
+    box.select("Îngrijirea tenului").run()
     assert card_names(at) == ["Cicaplast Baume B5+", "Effaclar Duo+"]
+
+
+def test_old_category_link_without_diacritics(
+    ui_api: respx.MockRouter, shop: dict[str, int]
+) -> None:
+    at = run_app({"category": "ingrijirea tenului"})
+    assert at.selectbox(key="category").value == "Îngrijirea tenului"
+    assert card_names(at) == ["Cicaplast Baume B5+", "Effaclar Duo+"]
+
+
+def test_brand_filter_lists_every_brand(ui_api: respx.MockRouter, api_session: Session) -> None:
+    # More brands than one API page (200): the list used to stop at "D".
+    brands = [Brand(name=f"Brand {i:03}", normalized_name=f"brand {i:03}") for i in range(250)]
+    api_session.add_all(brands)
+    api_session.add_all(
+        Product(brand=b, name=f"Produs {b.name}", normalized_name=f"produs {b.normalized_name}")
+        for b in brands
+    )
+    api_session.commit()
+    at = run_app()
+    options = at.selectbox(key="brand").options
+    assert len(options) == 251 and options[-1] == "Brand 249"
+    at.selectbox(key="brand").select("Brand 249").run()
+    assert card_names(at) == ["Produs Brand 249"]
+
+
+def test_back_forward_arrows_reload_the_page(
+    ui_api: respx.MockRouter, shop: dict[str, int]
+) -> None:
+    # Streamlit doesn't rerun on the browser's back/forward arrows; the page installs a
+    # popstate listener that reloads it (checked in a real browser: results come back).
+    at = run_app()
+    scripts = [e.proto.body for e in at.get("html")]
+    assert any("popstate" in body and "location.reload" in body for body in scripts)
 
 
 def test_price_range_filter(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
@@ -423,7 +461,7 @@ def test_search_is_written_to_the_url(ui_api: respx.MockRouter, shop: dict[str, 
     assert url(at) == {}  # defaults stay out of the URL
     at.text_input(key="q").input("Effaclar").run()
     at.selectbox(key="brand").select("La Roche-Posay").run()
-    at.text_input(key="category").input("Ingrijirea tenului").run()
+    at.selectbox(key="category").select("Îngrijirea tenului").run()
     at.number_input(key="min_lei").set_value(50.0).run()
     at.number_input(key="max_lei").set_value(99.5).run()
     at.checkbox(key="in_stock").check().run()
@@ -431,7 +469,7 @@ def test_search_is_written_to_the_url(ui_api: respx.MockRouter, shop: dict[str, 
     assert url(at) == {
         "q": "Effaclar",
         "brand": "La Roche-Posay",
-        "category": "Ingrijirea tenului",
+        "category": "Îngrijirea tenului",
         "min": "50",
         "max": "99.5",
         "in_stock": "1",
