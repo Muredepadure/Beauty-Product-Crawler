@@ -5,6 +5,7 @@ the API can't silently drift apart: a changed field fails validation here, in te
 The base URL comes from settings (`BEAUTYCRAWLER_API_BASE_URL`).
 """
 
+from collections.abc import Sequence
 from types import TracebackType
 from typing import Any, Self, TypeVar
 
@@ -98,6 +99,8 @@ class ApiClient:
         min_price_bani: int | None = None,
         max_price_bani: int | None = None,
         in_stock: bool = False,
+        retailers: Sequence[str] | None = None,
+        common: bool = False,
         unlisted: str = "show",
     ) -> ProductPage:
         params = {
@@ -110,6 +113,8 @@ class ApiClient:
             "min_price": min_price_bani,
             "max_price": max_price_bani,
             "in_stock": "true" if in_stock else None,
+            "retailer": list(retailers) if retailers else None,  # repeated: ?retailer=a&retailer=b
+            "common": "true" if common else None,
             "unlisted": None if unlisted == "show" else unlisted,
         }
         return self._model(ProductPage, "/products", params)
@@ -123,8 +128,16 @@ class ApiClient:
     def list_retailers(self) -> list[RetailerOut]:
         return _RETAILERS.validate_python(self._get("/retailers"))
 
-    def list_brands(self, q: str | None = None, page: int = 1, page_size: int = 200) -> BrandPage:
-        return self._model(BrandPage, "/brands", {"q": q, "page": page, "page_size": page_size})
+    def list_brands(
+        self, q: str | None = None, page: int = 1, page_size: int = 200, unlisted: str = "show"
+    ) -> BrandPage:
+        params = {
+            "q": q,
+            "page": page,
+            "page_size": page_size,
+            "unlisted": None if unlisted == "show" else unlisted,
+        }
+        return self._model(BrandPage, "/brands", params)
 
     def compare(self, brand: str, page: int = 1, page_size: int = 100) -> BrandComparison:
         params = {"brand": brand, "page": page, "page_size": page_size}

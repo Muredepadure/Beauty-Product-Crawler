@@ -275,11 +275,122 @@ def empty_hint(query: str | None, active_filters: int) -> str:
     return "Încă nu există produse în catalog."
 
 
+def common_caption(shops: int) -> str:
+    """What "Doar produse comune" (P12.3) keeps, given how many shops are chosen."""
+    if shops == 1:
+        return ""  # the same as the plain shop filter
+    if shops:
+        return f"Produse vândute în toate cele {stores_label(shops)} alese"
+    return "Produse vândute în cel puțin 2 magazine"
+
+
+def common_hint(shops: int) -> str | None:
+    """Empty-state hint when "Doar produse comune" finds no overlap (None with one shop,
+    where the toggle changes nothing)."""
+    if shops == 1:
+        return None
+    if shops:
+        return (
+            f"Niciun produs nu se vinde în toate cele {stores_label(shops)} alese. "
+            "Alege mai puține magazine sau oprește „Doar produse comune”."
+        )
+    return (
+        "Niciun produs nu se vinde încă în cel puțin 2 magazine. "
+        "Oprește „Doar produse comune” ca să vezi toate produsele."
+    )
+
+
 def lei_to_bani(lei: float | None) -> int | None:
     """A price typed in lei (0 or empty = no limit) as integer bani."""
     if not lei or lei <= 0:
         return None
     return round(lei * 100)
+
+
+# --- P12.1 search state in the URL ---------------------------------------------------
+
+SEARCH_DEFAULTS: dict[str, object] = {
+    "q": "",
+    "brand": "",  # "" = every brand
+    "category": "",
+    "min_lei": 0.0,
+    "max_lei": 0.0,
+    "in_stock": False,
+    "retailers": (),  # retailer slugs; () = every shop
+    "common": False,  # only products sold in every chosen shop (none chosen: in 2+ shops)
+    "sort": "name",
+    "page": 1,
+}
+"""The search page's state (search text, sidebar filters, sort, page) and its defaults."""
+
+SEARCH_URL_KEYS: dict[str, str] = {
+    "q": "q",
+    "brand": "brand",
+    "category": "category",
+    "min_lei": "min",
+    "max_lei": "max",
+    "in_stock": "in_stock",
+    "retailers": "retailer",  # comma-separated slugs
+    "common": "common",
+    "sort": "sort",
+    "page": "page",
+}
+"""State key -> query parameter name."""
+
+
+def _url_number(value: float) -> str:
+    """60.0 -> "60", 59.9 -> "59.9"."""
+    return str(int(value)) if value.is_integer() else str(value)
+
+
+def search_state_to_params(state: Mapping[str, object]) -> dict[str, str]:
+    """Search state as query parameters; empty and default values are left out, so the
+    plain search page is just "/"."""
+    params: dict[str, str] = {}
+    for key, name in SEARCH_URL_KEYS.items():
+        value = state.get(key, SEARCH_DEFAULTS[key])
+        if value is None or value == SEARCH_DEFAULTS[key] or value == "":
+            continue
+        if isinstance(value, bool):
+            text = "1"
+        elif isinstance(value, list | tuple):
+            text = ",".join(str(v).strip() for v in value if str(v).strip())
+        elif isinstance(value, float):
+            text = _url_number(value)
+        else:
+            text = str(value).strip()
+        if text:
+            params[name] = text
+    return params
+
+
+def _parse_lei(text: str) -> float:
+    try:
+        value = float(text.replace(",", "."))
+    except ValueError:
+        return 0.0
+    return value if 0 < value < 1e9 else 0.0  # also rejects nan/inf
+
+
+def search_state_from_params(params: Mapping[str, str]) -> dict[str, object]:
+    """The search state a URL describes. Anything missing or invalid (a hand-edited or
+    outdated link) falls back to its default instead of failing."""
+    state = dict(SEARCH_DEFAULTS)
+    get = {key: (params.get(name) or "").strip() for key, name in SEARCH_URL_KEYS.items()}
+    state["q"] = get["q"]
+    state["brand"] = get["brand"]
+    state["category"] = get["category"]
+    state["min_lei"] = _parse_lei(get["min_lei"])
+    state["max_lei"] = _parse_lei(get["max_lei"])
+    state["in_stock"] = get["in_stock"].lower() in ("1", "true", "da")
+    state["common"] = get["common"].lower() in ("1", "true", "da")
+    slugs = (s.strip().lower() for s in get["retailers"].split(","))
+    state["retailers"] = tuple(dict.fromkeys(s for s in slugs if s))
+    if get["sort"] in SORT_LABELS:
+        state["sort"] = get["sort"]
+    if get["page"].isdigit() and int(get["page"]) >= 1:
+        state["page"] = int(get["page"])
+    return state
 
 
 # --- P7.4 competitor view ------------------------------------------------------------

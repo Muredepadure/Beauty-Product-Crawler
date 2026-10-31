@@ -27,7 +27,7 @@ Repeat for as many tasks as fit in the session, in roadmap order (skip `[!]` blo
 
 1. Implement the task. Keep the diff focused on that task.
 2. Write or update tests for it. Tests never use the network (see CLAUDE.md).
-3. Run the full checks: `ruff check .`, `ruff format --check .`, `mypy src`, `pytest -q`.
+3. Run the full checks: `ruff check .`, `ruff format --check .`, `mypy src tests`, `pytest -q` (CI type-checks the tests too).
    Fix everything until all pass. Never weaken, skip or delete a test just to make it pass;
    if a test is genuinely wrong, fix it and explain why in the commit message.
 4. Tick the task in `ROADMAP.md` (`[x]`, or `[~]` with a note if partial).

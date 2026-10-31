@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urljoin
 
-from selectolax.parser import HTMLParser
+from selectolax.lexbor import LexborHTMLParser as HTMLParser
 
 from beautycrawler.crawler.scraped import ScrapedOffer, normalize_gtin
 from beautycrawler.extractors.price import parse_machine_price

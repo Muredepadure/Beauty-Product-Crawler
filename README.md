@@ -110,6 +110,34 @@ python -m beautycrawler.crawler schedule --retailer notino --every-hours 12
 17 * * * * cd /srv/beautycrawler && .venv/bin/python -m beautycrawler.crawler --log-format json run --all --due --match >> logs/crawl.jsonl 2>&1
 ```
 
+### Multi-night crawls (Windows)
+
+Big catalogues don't fit in one night, so the nightly crawl continues where it stopped:
+
+- `--skip-seen-hours H` skips pages whose listing was seen in the last H hours (the
+  `--limit` then counts only new pages). A spider can override `page_key()` when the
+  shop's product data names a different URL than its sitemap (Profihairshop).
+- `--until HH:MM` stops between pages at that local time; retailers not reached are
+  reported as skipped.
+- A shop answering `429` with `Retry-After` is paced to that interval for the rest of the
+  run; 5 pages in a row still refused after retries ends that shop for the run.
+- A crawl that skipped pages or stopped early is not complete, so it never counts misses
+  (nothing is marked out of stock because it was skipped).
+
+`scripts/nightly_crawl.ps1` runs the priority order (Profihairshop, XpertBeauty, Parfimo,
+Esteto, ProBeauty, Beauty Lounge) with `--skip-seen-hours 144 --until 07:00 --match
+--keep-awake` and logs to `logs\crawl-<start date>.log` / `.json` (a progress line per
+shop every 5 minutes). Register it once with Task Scheduler. `conhost.exe --headless`
+runs it without a window: on Windows 11 `-WindowStyle Hidden` still opens a Windows
+Terminal window, and closing that window kills the crawl.
+
+```powershell
+$action  = New-ScheduledTaskAction -Execute "conhost.exe" -Argument "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$PWD\scripts\nightly_crawl.ps1`""
+$trigger = New-ScheduledTaskTrigger -Daily -At 23:00
+$options = New-ScheduledTaskSettingsSet -WakeToRun -ExecutionTimeLimit (New-TimeSpan -Hours 9)
+Register-ScheduledTask -TaskName "BeautyCrawler nightly crawl" -Action $action -Trigger $trigger -Settings $options
+```
+
 ### Matching offers to products
 
 ```bash
@@ -138,7 +166,7 @@ All prices are integer **bani** (1 RON = 100 bani); times are UTC.
 | Endpoint | Returns |
 |---|---|
 | `GET /healthz` | `{"status": "ok"}` |
-| `GET /api/products` | Product search. `q` (every word must match name or brand; case/diacritics ignored), `brand` (any alias), `category`, `min_price`/`max_price` (bani, on the lowest in-stock price), `in_stock=true`, `unlisted` = `show` (default) \| `hide` \| `auto` (hide products without listings once any product has one), `sort` = `name` \| `price_asc` \| `price_desc` \| `retailers`, `page`, `page_size` (1–100) |
+| `GET /api/products` | Product search. `q` (every word must match name or brand; case/diacritics ignored), `brand` (any alias), `category`, `min_price`/`max_price` (bani, on the lowest in-stock price), `in_stock=true`, `retailer` (slug, repeatable: products listed by any of those shops; prices and counts still cover every shop), `common=true` (with `retailer`: listed by every one of those shops; without: by at least 2 shops), `unlisted` = `show` (default) \| `hide` \| `auto` (hide products without listings once any product has one), `sort` = `name` \| `price_asc` \| `price_desc` \| `retailers`, `page`, `page_size` (1–100) |
 | `GET /api/products/{id}` | The product with every retailer's offer: in stock by price first, `is_cheapest` on the lowest in-stock price |
 | `GET /api/products/{id}/history` | Price history per offer (`days` window). Points exist only on change: draw steps |
 | `GET /api/retailers` | Tracked retailers with offer/product counts (`active` filter) |
@@ -156,9 +184,13 @@ Run it from the repository root: Streamlit reads the theme (accent colour, light
 mode) from `.streamlit/config.toml` in the current directory. Shared names, colours and
 the one custom CSS block live in `src/beautycrawler/ui_style.py`.
 
-- **Caută produse**: search with brand/category/price/stock filters and product cards;
+- **Caută produse**: search with brand/shop/category/price/stock filters ("Doar produse
+  comune": only products sold in every chosen shop, or in 2+ shops) and product cards;
   a product page (`?product=<id>`, shareable) with the price table across retailers
-  (cheapest highlighted, links out) and the price-history chart.
+  (cheapest highlighted, links out) and the price-history chart. The search text,
+  filters, sort and page are kept in the URL (`?q=…&brand=…&page=2`), so results can be
+  bookmarked or shared and the browser's back/forward arrows move between results and
+  product pages.
 - **Comparație prețuri**: pick a brand to see each retailer's position and a
   product-by-retailer grid vs the median; pick a retailer to see where it is over or
   under the market.

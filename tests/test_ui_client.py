@@ -80,6 +80,23 @@ def test_empty_params_are_not_sent(api: ApiClient, product_id: int) -> None:
     assert api.search_products("", brand="", category=None).total == 1
 
 
+def test_retailers_are_sent_as_repeated_params(api: ApiClient, product_id: int) -> None:
+    with respx.mock(assert_all_called=True) as router:
+        route = router.get("http://api.test/api/products").mock(
+            return_value=httpx.Response(
+                200, json={"total": 0, "page": 1, "page_size": 24, "items": []}
+            )
+        )
+        with ApiClient("http://api.test/api/") as remote:
+            remote.search_products(retailers=["esteto", "probeauty"])
+            remote.search_products(retailers=[])
+    first, second = (call.request.url.params for call in route.calls)
+    assert first.get_list("retailer") == ["esteto", "probeauty"]
+    assert "retailer" not in second
+    assert api.search_products(retailers=["notino"]).total == 1
+    assert api.search_products(retailers=["emag"]).total == 0
+
+
 def test_not_found(api: ApiClient) -> None:
     with pytest.raises(NotFound) as err:
         api.get_product(12345)
@@ -148,3 +165,14 @@ def test_unlisted_mode_is_passed_through(
     api_session.commit()
     assert api.search_products().total == 2  # default "show" is not even sent
     assert api.search_products(unlisted="auto").total == 1
+
+
+def test_brand_unlisted_mode_is_passed_through(
+    api: ApiClient, product_id: int, api_session: Session
+) -> None:
+    api_session.add(Brand(name="Demo Brand", normalized_name="demo brand"))
+    api_session.commit()
+    all_brands = [b.name for b in api.list_brands().items]
+    listed = [b.name for b in api.list_brands(unlisted="auto").items]
+    assert "Demo Brand" in all_brands
+    assert "Demo Brand" not in listed and listed

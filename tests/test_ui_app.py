@@ -224,7 +224,8 @@ def test_footer_shows_data_freshness(ui_api: respx.MockRouter, shop: dict[str, i
 def test_card_button_opens_product_page(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
     at = run_app()
     at.button(key=f"open-{shop['duo']}").click().run()
-    assert at.query_params["product"] == [str(shop["duo"])]
+    # AppTest gives ["1"] on older Streamlit releases and "1" on 1.66.
+    assert at.query_params["product"] in ([str(shop["duo"])], str(shop["duo"]))
     assert at.title[0].value == "Effaclar Duo+"
     at.button[0].click().run()  # back
     assert "product" not in at.query_params
@@ -398,3 +399,226 @@ def test_competitor_matrix_marks_unlisted_cells(
 def test_competitor_view_without_brands(ui_api: respx.MockRouter) -> None:
     at = open_competitors()
     assert "Nu există încă branduri" in at.info[0].value
+
+
+# --- P12.1: the search lives in the URL ----------------------------------------------
+
+
+def url(at: AppTest) -> dict[str, str]:
+    # AppTest gives ["v"] on older Streamlit releases and "v" on 1.66.
+    return {k: v[-1] if isinstance(v, list) else v for k, v in at.query_params.items()}
+
+
+@pytest.fixture
+def many_products(api_session: Session) -> list[int]:
+    """30 products without offers (shown before the first crawl): two result pages."""
+    products = [Product(name=f"Produs {i:02}", normalized_name=f"produs {i:02}") for i in range(30)]
+    api_session.add_all(products)
+    api_session.commit()
+    return [p.id for p in products]
+
+
+def test_search_is_written_to_the_url(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    at = run_app()
+    assert url(at) == {}  # defaults stay out of the URL
+    at.text_input(key="q").input("Effaclar").run()
+    at.selectbox(key="brand").select("La Roche-Posay").run()
+    at.text_input(key="category").input("Ingrijirea tenului").run()
+    at.number_input(key="min_lei").set_value(50.0).run()
+    at.number_input(key="max_lei").set_value(99.5).run()
+    at.checkbox(key="in_stock").check().run()
+    at.selectbox(key="sort").select("price_asc").run()
+    assert url(at) == {
+        "q": "Effaclar",
+        "brand": "La Roche-Posay",
+        "category": "Ingrijirea tenului",
+        "min": "50",
+        "max": "99.5",
+        "in_stock": "1",
+        "sort": "price_asc",
+    }
+    assert card_names(at) == ["Effaclar Duo+"]
+    at.button(key="reset_filters").click().run()
+    assert url(at) == {"q": "Effaclar", "sort": "price_asc"}  # search text and sort stay
+
+
+def test_shared_results_link(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    at = run_app({"brand": "La Roche-Posay", "sort": "price_desc", "in_stock": "1"})
+    assert not at.exception
+    assert at.selectbox(key="brand").value == "La Roche-Posay"
+    assert at.selectbox(key="sort").value == "price_desc"
+    assert at.checkbox(key="in_stock").value is True
+    assert card_names(at) == ["Effaclar Duo+", "Cicaplast Baume B5+"]
+
+
+def test_back_button_returns_to_the_same_results(
+    ui_api: respx.MockRouter, shop: dict[str, int]
+) -> None:
+    at = run_app()
+    at.selectbox(key="brand").select("La Roche-Posay").run()
+    at.selectbox(key="sort").select("price_desc").run()
+    at.button(key=f"open-{shop['cica']}").click().run()
+    assert url(at) == {
+        "brand": "La Roche-Posay",
+        "sort": "price_desc",
+        "product": str(shop["cica"]),
+    }
+    assert at.title[0].value == "Cicaplast Baume B5+"
+    at.button[0].click().run()  # "← Înapoi la rezultate"
+    assert url(at) == {"brand": "La Roche-Posay", "sort": "price_desc"}
+    assert at.selectbox(key="brand").value == "La Roche-Posay"
+    assert at.selectbox(key="sort").value == "price_desc"
+    assert card_names(at) == ["Effaclar Duo+", "Cicaplast Baume B5+"]
+
+
+def test_back_button_keeps_the_page(ui_api: respx.MockRouter, many_products: list[int]) -> None:
+    at = run_app()
+    assert at.subheader[0].value == "30 de produse"
+    at.number_input(key="page").set_value(2).run()
+    assert url(at) == {"page": "2"}
+    assert card_names(at)[0] == "Produs 24"
+    at.button(key=f"open-{many_products[25]}").click().run()
+    at.button[0].click().run()
+    assert at.number_input(key="page").value == 2
+    assert card_names(at)[0] == "Produs 24"
+    at.text_input(key="q").input("produs").run()  # a new search starts on page 1
+    assert url(at) == {"q": "produs"}
+
+
+def test_browser_arrows_restore_earlier_urls(
+    ui_api: respx.MockRouter, shop: dict[str, int]
+) -> None:
+    """The back/forward arrows rerun the script with the earlier URL."""
+    at = run_app()
+    at.selectbox(key="brand").select("CeraVe").run()
+    results = url(at)
+    at.button(key=f"open-{shop['cleanser']}").click().run()
+    product = url(at)
+    at.query_params.clear()
+    at.query_params.update(results)
+    at.run()  # back: the CeraVe results
+    assert at.title[0].value == "🔎 Caută produse"
+    assert at.selectbox(key="brand").value == "CeraVe"
+    assert card_names(at) == ["Hydrating Cleanser"]
+    at.query_params.clear()
+    at.run()  # back again: the unfiltered search
+    assert at.selectbox(key="brand").value == "Toate brandurile"
+    assert len(card_names(at)) == 3
+    at.query_params.update(product)
+    at.run()  # forward twice: the product page
+    assert at.title[0].value == "Hydrating Cleanser"
+
+
+def test_competitor_page_round_trip_keeps_the_search(
+    ui_api: respx.MockRouter, shop: dict[str, int]
+) -> None:
+    at = run_app()
+    at.checkbox(key="in_stock").check().run()
+    at.radio(key="nav").set_value("🏷️ Comparație prețuri").run()
+    at.radio(key="nav").set_value("🔎 Caută produse").run()
+    assert at.checkbox(key="in_stock").value is True
+    assert card_names(at) == ["Cicaplast Baume B5+", "Effaclar Duo+"]
+
+
+def test_bad_search_urls_fall_back_to_defaults(
+    ui_api: respx.MockRouter, shop: dict[str, int]
+) -> None:
+    at = run_app({"brand": "Nu Există", "sort": "random", "min": "abc", "page": "-3"})
+    assert not at.exception
+    assert at.selectbox(key="brand").value == "Toate brandurile"
+    assert at.selectbox(key="sort").value == "name"
+    assert len(card_names(at)) == 3
+    assert url(at) == {}  # rewritten without the invalid values
+
+
+def test_page_beyond_the_results_shows_the_last_page(
+    ui_api: respx.MockRouter, many_products: list[int]
+) -> None:
+    at = run_app({"page": "9"})
+    assert not at.exception
+    assert at.number_input(key="page").value == 2
+    assert url(at) == {"page": "2"}
+    assert card_names(at)[0] == "Produs 24"
+
+
+# --- P12.2: shop filter ----------------------------------------------------------------
+
+
+def test_shop_filter(ui_api: respx.MockRouter, shop: dict[str, int], api_session: Session) -> None:
+    api_session.add(Retailer(slug="citrika", name="Citrika", domain="citrika.ro"))  # no offers
+    api_session.commit()
+    at = run_app()
+    shops = at.multiselect(key="retailers")
+    assert shops.options == ["eMAG", "Notino"]  # names, only shops with listed products
+    shops.select("notino").run()
+    assert card_names(at) == ["Cicaplast Baume B5+", "Effaclar Duo+"]
+    assert url(at) == {"retailer": "notino"}
+    # the cards still show every shop's prices
+    assert '<span class="bc-from">de la</span> 74,50 lei' in card_markup(at)[1]
+    at.multiselect(key="retailers").select("emag").run()
+    assert len(card_names(at)) == 3
+    assert url(at) == {"retailer": "notino,emag"}
+    assert not at.button(key="reset_filters").disabled
+    at.button(key="reset_filters").click().run()
+    assert at.multiselect(key="retailers").value == []
+    assert url(at) == {}
+
+
+def test_shop_filter_from_a_link(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    at = run_app({"retailer": "notino,nu-exista"})  # unknown shops are dropped
+    assert not at.exception
+    assert at.multiselect(key="retailers").value == ["notino"]
+    assert card_names(at) == ["Cicaplast Baume B5+", "Effaclar Duo+"]
+    assert url(at) == {"retailer": "notino"}
+    at.button(key=f"open-{shop['duo']}").click().run()
+    at.button[0].click().run()  # back to the results keeps the shop
+    assert at.multiselect(key="retailers").value == ["notino"]
+
+
+# --- P12.3: products sold in several shops -------------------------------------------
+
+
+def test_common_products_without_shops(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    at = run_app()
+    at.toggle(key="common").set_value(True).run()
+    # both sold by notino and emag (a tie in shops: by id); the cleanser only by emag
+    assert card_names(at) == ["Effaclar Duo+", "Cicaplast Baume B5+"]
+    assert at.selectbox(key="sort").value == "retailers"  # most shops first
+    assert "Produse vândute în cel puțin 2 magazine" in [c.value for c in at.caption]
+    assert url(at) == {"common": "1", "sort": "retailers"}
+    at.toggle(key="common").set_value(False).run()
+    assert at.selectbox(key="sort").value == "name"
+    assert url(at) == {}
+
+
+def test_common_keeps_a_chosen_sort(ui_api: respx.MockRouter, shop: dict[str, int]) -> None:
+    at = run_app()
+    at.selectbox(key="sort").select("price_asc").run()
+    at.toggle(key="common").set_value(True).run()
+    assert at.selectbox(key="sort").value == "price_asc"
+    assert card_names(at) == ["Cicaplast Baume B5+", "Effaclar Duo+"]  # 55 lei, 74,50 lei
+
+
+def test_common_products_in_chosen_shops(
+    ui_api: respx.MockRouter, shop: dict[str, int], api_session: Session
+) -> None:
+    cerave = api_session.query(Brand).filter_by(name="CeraVe").one()
+    serum = Product(brand=cerave, name="Ser Hialuronic", normalized_name="ser hialuronic")
+    api_session.add(serum)
+    api_session.flush()
+    elefant = Retailer(slug="elefant", name="Elefant", domain="elefant.ro")
+    _observe(api_session, elefant, serum, "https://elefant.ro/ser", [(10, 6_000, True)])
+    api_session.commit()
+    at = run_app({"retailer": "notino,emag", "common": "1"})
+    assert not at.exception
+    assert at.toggle(key="common").value is True
+    assert card_names(at) == ["Cicaplast Baume B5+", "Effaclar Duo+"]
+    assert "Produse vândute în toate cele 2 magazine alese" in [c.value for c in at.caption]
+    at.multiselect(key="retailers").select("elefant").run()  # nothing is sold in all three
+    text = markdown(at)
+    assert "Niciun produs găsit" in text
+    assert "Niciun produs nu se vinde în toate cele 3 magazine alese." in text
+    assert url(at) == {"retailer": "notino,emag,elefant", "common": "1"}
+    at.button(key="reset_filters_empty").click().run()
+    assert at.toggle(key="common").value is False
+    assert len(card_names(at)) == 4
