@@ -54,6 +54,15 @@ async def test_robots_disallow(fetcher: PoliteFetcher, mock: respx.MockRouter) -
     assert await fetcher.allowed(f"{SHOP}/produs/x") is True
 
 
+async def test_robots_wildcard_disallow(fetcher: PoliteFetcher, mock: respx.MockRouter) -> None:
+    robots(mock, "User-agent: *\nDisallow: /*?sort=\n")
+    page = mock.get(f"{SHOP}/par").mock(return_value=httpx.Response(200))
+    with pytest.raises(RobotsDisallowedError):
+        await fetcher.fetch(f"{SHOP}/par?sort=pret")
+    assert not page.called
+    assert await fetcher.allowed(f"{SHOP}/par?page=2") is True
+
+
 async def test_robots_specific_user_agent_group(settings: Settings, fake_time: FakeTime) -> None:
     text = "User-agent: BeautyCrawlerTest\nDisallow: /\n\nUser-agent: *\nAllow: /\n"
     with respx.mock() as mock:

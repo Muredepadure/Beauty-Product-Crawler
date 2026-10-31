@@ -1,5 +1,6 @@
 import json
 import logging
+from collections import Counter
 from collections.abc import AsyncIterator, Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -488,9 +489,23 @@ def _vanished(engine: Engine) -> Offer:
         return s.scalars(select(Offer).where(Offer.url == f"{BASE}/p/discontinued")).one()
 
 
-async def _run(engine: Engine, settings: Settings, fake_time: FakeTime, **kw: int) -> RunSummary:
+async def _run(
+    engine: Engine,
+    settings: Settings,
+    fake_time: FakeTime,
+    limit: int | None = None,
+    stale_after: int | None = None,
+    skip_seen_hours: float | None = None,
+) -> RunSummary:
     async with PoliteFetcher(settings, sleep=fake_time.sleep, clock=fake_time.clock) as f:
-        return await runner.run_spider("clitest", make_session_factory(engine), f, **kw)
+        return await runner.run_spider(
+            "clitest",
+            make_session_factory(engine),
+            f,
+            limit=limit,
+            stale_after=stale_after,
+            skip_seen_hours=skip_seen_hours,
+        )
 
 
 async def test_complete_crawl_counts_misses(
@@ -519,6 +534,36 @@ async def test_limited_crawl_does_not_count_misses(
     assert _vanished(engine).missed_runs == 0
 
 
+async def test_crawl_skipping_seen_pages_does_not_count_misses(
+    mock: respx.MockRouter, db: tuple[str, Engine], settings: Settings, fake_time: FakeTime
+) -> None:
+    _, engine = db
+    _add_vanished_offer(engine)
+    with Session(engine) as s:
+        retailer = s.scalars(select(Retailer).where(Retailer.slug == "clitest")).one()
+        # A listing stored under the page's own URL, seen an hour ago.
+        s.add(
+            Offer(
+                retailer=retailer,
+                url=f"{BASE}/p/1?variant=7",
+                title="Seen recently",
+                price_bani=1_000,
+                in_stock=True,
+                last_seen_at=datetime.now(UTC) - timedelta(hours=1),
+            )
+        )
+        s.commit()
+
+    summary = await _run(engine, settings, fake_time, stale_after=1, skip_seen_hours=24)
+
+    assert summary.stats.skipped_seen == 1  # /p/1 left out, /p/2 crawled
+    assert summary.stats.pages_fetched == 1
+    # Not a complete crawl, so the vanished listing doesn't count a miss.
+    assert summary.missed is None
+    assert (_vanished(engine).missed_runs, _vanished(engine).in_stock) == (0, True)
+    assert "1 seen recently (skipped)" in summary.line()
+
+
 async def test_crawl_finding_nothing_does_not_count_misses(
     mock: respx.MockRouter, db: tuple[str, Engine], settings: Settings, fake_time: FakeTime
 ) -> None:
@@ -528,3 +573,96 @@ async def test_crawl_finding_nothing_does_not_count_misses(
     summary = await _run(engine, settings, fake_time, stale_after=1)
     assert (summary.stats.offers, summary.missed) == (0, None)
     assert (_vanished(engine).missed_runs, _vanished(engine).in_stock) == (0, True)
+
+
+async def test_progress_commits_logs_and_calls_the_hook(
+    mock: respx.MockRouter,
+    db: tuple[str, Engine],
+    settings: Settings,
+    fake_time: FakeTime,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _, engine = db
+    factory = make_session_factory(engine)
+    seen: list[int] = []
+
+    def hook(session: Session) -> None:
+        # Called after a commit: a separate connection already sees the offers.
+        seen.append(count(engine, Offer))
+
+    caplog.set_level(logging.INFO, logger="beautycrawler.crawler.runner")
+    async with fetcher_factory(settings, fake_time)() as fetcher:
+        await runner.run_spider("clitest", factory, fetcher, on_progress=hook, progress_every=0)
+    assert seen == [1, 1]  # both pages give the same canonical offer
+    progress = [r for r in caplog.records if getattr(r, "event", None) == "crawl_progress"]
+    assert "clitest: 1 pages, 1 offers so far (1 new), 0 errors" in progress[0].getMessage()
+
+
+def test_match_links_offers_left_by_an_interrupted_run(
+    mock: respx.MockRouter,
+    db: tuple[str, Engine],
+    settings: Settings,
+    fake_time: FakeTime,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    url, engine = db
+    # A crawl without --match stands in for a night that was killed before linking.
+    plain = ["run", "--retailer", "clitest", "--database-url", url]
+    assert main(plain, fetcher_factory(settings, fake_time)) == 0
+    with Session(engine) as s:
+        assert s.scalars(select(Offer)).one().product_id is None
+    # The next run links it before crawling, even if it then crawls nothing.
+    argv = ["run", "--retailer", "clitest", "--limit", "1", "--database-url", url, "--match"]
+    argv += ["--skip-seen-hours", "24"]
+    assert main(argv, fetcher_factory(settings, fake_time)) == 0
+    assert "matching: new_product 1" in capsys.readouterr().out
+    with Session(engine) as s:
+        assert s.scalars(select(Offer)).one().product_id is not None
+
+
+def test_offers_still_waiting_are_not_counted_once_per_pass(
+    mock: respx.MockRouter,
+    db: tuple[str, Engine],
+    settings: Settings,
+    fake_time: FakeTime,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    url, _ = db
+    passes = iter([Counter(unmatched=3), Counter(unmatched=3, new_product=1)])
+    monkeypatch.setattr(
+        "beautycrawler.crawler.__main__.match_unmatched", lambda session: next(passes)
+    )
+    argv = ["run", "--retailer", "clitest", "--database-url", url, "--match"]
+    assert main(argv, fetcher_factory(settings, fake_time)) == 0
+    assert "matching: new_product 1, unmatched 3" in capsys.readouterr().out
+
+
+async def test_a_brand_filtered_run_marks_nothing_missed(
+    mock: respx.MockRouter, db: tuple[str, Engine], settings: Settings, fake_time: FakeTime
+) -> None:
+    _, engine = db
+    _add_vanished_offer(engine)  # stands in for a product of another brand
+    async with PoliteFetcher(settings, sleep=fake_time.sleep, clock=fake_time.clock) as f:
+        # /p/1 names "1" and the page's brand is La Roche-Posay: one offer found, /p/2
+        # filtered out. Offers were found, yet the crawl isn't complete: no misses.
+        summary = await runner.run_spider(
+            "clitest", make_session_factory(engine), f, brands=("1", "La Roche-Posay")
+        )
+    assert (summary.stats.offers, summary.stats.skipped_brands) == (1, 1)
+    assert summary.missed is None
+    assert _vanished(engine).missed_runs == 0
+
+
+def test_until_in_the_past_skips_every_retailer(
+    mock: respx.MockRouter,
+    db: tuple[str, Engine],
+    settings: Settings,
+    fake_time: FakeTime,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    url, engine = db
+    argv = ["run", "--retailer", "clitest", "--database-url", url, "--until", "2026-01-01T07:00"]
+    assert main(argv, fetcher_factory(settings, fake_time)) == 0
+    assert "clitest: skipped: time limit reached" in capsys.readouterr().out
+    assert count(engine, Offer) == 0

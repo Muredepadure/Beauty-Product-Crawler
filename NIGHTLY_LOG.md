@@ -12,6 +12,178 @@ Blockers / questions for owner: <or "none">
 
 ---
 
+## 2026-10-26 — claude/nightly-2026-10-18-P11.1 — (local session with the owner, not a nightly run)
+Done:
+- Live smoke runs of the Phase 11 spiders from the owner's PC: Esteto 10/10; Profihairshop works
+  (errors are 404s: ~14% of its sitemap lists deleted products); XpertBeauty's parser works on
+  live pages (the 10-page test only reached its CMS/category pages, which come first in
+  sitemap-1-1); ProBeauty/Beauty Lounge answer `429 local_rate_limited, Retry-After: 60`.
+- Multi-night crawling (P9.2, partly): `--skip-seen-hours`, `--until HH:MM`, per-host pacing
+  learned from 429 Retry-After, give up a shop after 5 refused pages in a row; partial crawls
+  never count misses. `Spider.page_key()` (Profihairshop: product slug, since its JSON-LD URL
+  has an extra category level). `scripts/nightly_crawl.ps1` + Windows Task Scheduler at 23:00.
+Tests: 810/810 passed, lint ✓, format ✓, mypy ✓
+Next: owner merges #9, #10. Nightly cloud routine paused (nothing it can do without shop access).
+Blockers / questions for owner: none.
+
+## 2026-10-25 (nightly, second run) — claude/nightly-2026-10-18-P11.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/10
+Done: nothing. Every roadmap task is still ticked or blocked/on hold ([!]); PRs #9 and #10 still
+have no reviews or comments. No empty PR opened.
+Tests: not re-run (no code changes).
+Next: owner reviews and merges #9 then #10; then whatever the owner unblocks (P3/P9 hold).
+Blockers / questions for owner: unchanged (see 2026-10-18). Fourteenth idle run in a row:
+please pause the nightly schedule or add tasks to ROADMAP.md.
+
+## 2026-10-25 (nightly) — claude/nightly-2026-10-18-P11.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/10
+Done: nothing. Every roadmap task is still ticked or blocked/on hold ([!]); PRs #9 and #10 still
+have no reviews or comments. No empty PR opened.
+Tests: not re-run (no code changes).
+Next: owner reviews and merges #9 then #10; then whatever the owner unblocks (P3/P9 hold).
+Blockers / questions for owner: unchanged (see 2026-10-18). Thirteenth idle run in a row:
+please pause the nightly schedule or add tasks to ROADMAP.md.
+
+## 2026-10-24 (nightly, second run) — claude/nightly-2026-10-18-P11.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/10
+Done: nothing. Every roadmap task is still ticked or blocked/on hold ([!]); PRs #9 and #10 still
+have no reviews or comments. No empty PR opened.
+Tests: not re-run (no code changes).
+Next: owner reviews and merges #9 then #10; then whatever the owner unblocks (P3/P9 hold).
+Blockers / questions for owner: unchanged (see 2026-10-18). Twelfth idle run in a row:
+please pause the nightly schedule or add tasks to ROADMAP.md.
+
+## 2026-10-24 (nightly) — claude/nightly-2026-10-18-P11.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/10
+Done: nothing. Every roadmap task is still ticked or blocked/on hold ([!]); PRs #9 and #10 still
+have no reviews or comments. No empty PR opened.
+Tests: not re-run (no code changes).
+Next: owner reviews and merges #9 then #10; then whatever the owner unblocks (P3/P9 hold).
+Blockers / questions for owner: unchanged (see 2026-10-18). Eleventh idle run in a row:
+please pause the nightly schedule or add tasks to ROADMAP.md.
+
+## 2026-10-23 (nightly, second run) — claude/nightly-2026-10-18-P11.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/10
+Done: nothing. Every roadmap task is still ticked or blocked/on hold ([!]); PRs #9 and #10 still
+have no reviews or comments. No empty PR opened.
+Tests: not re-run (no code changes).
+Next: owner reviews and merges #9 then #10; then whatever the owner unblocks (P3/P9 hold).
+Blockers / questions for owner: unchanged (see 2026-10-18). Tenth idle run in a row:
+please pause the nightly schedule or add tasks to ROADMAP.md.
+
+## 2026-10-23 (nightly) — claude/nightly-2026-10-18-P11.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/10
+Done: nothing. Every roadmap task is still ticked or blocked/on hold ([!]); PRs #9 and #10 still
+have no reviews or comments. No empty PR opened.
+Tests: not re-run (no code changes).
+Next: owner reviews and merges #9 then #10; then whatever the owner unblocks (P3/P9 hold).
+Blockers / questions for owner: unchanged (see 2026-10-18). Ninth idle run in a row:
+please pause the nightly schedule or add tasks to ROADMAP.md.
+
+## 2026-10-22 (nightly, second run) — claude/nightly-2026-10-18-P11.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/10
+Done: nothing. Every roadmap task is still ticked or blocked/on hold ([!]); PRs #9 and #10 still
+have no reviews or comments. The Phase 11 shops are still unreachable from the cloud (no connection).
+No empty PR opened.
+Tests: not re-run (no code changes).
+Next: owner reviews and merges #9 then #10; then whatever the owner unblocks (P3/P9 hold).
+Blockers / questions for owner: unchanged (see 2026-10-18). Eighth idle run in a row:
+please pause the nightly schedule or add tasks to ROADMAP.md.
+
+## 2026-10-22 (nightly) — claude/nightly-2026-10-18-P11.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/10
+Done: nothing. Every roadmap task is still ticked or blocked/on hold ([!]); PRs #9 and #10 still
+have no reviews or comments. The Phase 11 shops are still unreachable from the cloud (no connection).
+No empty PR opened.
+Tests: not re-run (no code changes).
+Next: owner reviews and merges #9 then #10; then whatever the owner unblocks (P3/P9 hold).
+Blockers / questions for owner: unchanged (see 2026-10-18). Seventh idle run in a row:
+please pause the nightly schedule or add tasks to ROADMAP.md.
+
+## 2026-10-21 (nightly, second run) — claude/nightly-2026-10-18-P11.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/10
+Done: nothing. Every roadmap task is still ticked or blocked/on hold ([!]); PRs #9 and #10 still
+have no reviews or comments. The Phase 11 shops are still unreachable from the cloud (no connection).
+No empty PR opened.
+Tests: not re-run (no code changes).
+Next: owner reviews and merges #9 then #10; then whatever the owner unblocks (P3/P9 hold).
+Blockers / questions for owner: unchanged (see 2026-10-18). Sixth idle run in a row:
+please pause the nightly schedule or add tasks to ROADMAP.md.
+
+## 2026-10-21 (nightly) — claude/nightly-2026-10-18-P11.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/10
+Done: nothing. Every roadmap task is still ticked or blocked/on hold ([!]); PRs #9 and #10 still
+have no reviews or comments, and #10's head is unchanged since the last green CI run. No empty PR opened.
+Tests: not re-run (no code changes).
+Next: owner reviews and merges #9 then #10; then whatever the owner unblocks (P3/P9 hold).
+Blockers / questions for owner: unchanged (see 2026-10-18). Fifth idle run in a row:
+please pause the nightly schedule or add tasks to ROADMAP.md.
+
+## 2026-10-20 (nightly, second run) — claude/nightly-2026-10-18-P11.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/10
+Done: nothing. Every roadmap task is still ticked or blocked/on hold ([!]); PRs #9 and #10 have
+no reviews or comments; CI on #10's head is green (checks ✓, postgres ✓). No empty PR opened.
+Tests: not re-run (no code changes).
+Next: owner reviews and merges #9 then #10; then whatever the owner unblocks (P3/P9 hold).
+Blockers / questions for owner: unchanged (see 2026-10-18). Fourth idle run in a row:
+please pause the nightly schedule or add tasks to ROADMAP.md.
+
+## 2026-10-20 (nightly) — claude/nightly-2026-10-18-P11.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/10
+Done: nothing. Same state as the two 2026-10-19 runs: every roadmap task is ticked or
+blocked/on hold ([!]), PRs #9 and #10 still have no reviews or comments. No empty PR opened.
+- The Phase 11 shops are still unreachable from the cloud environment (connection refused),
+  so the live smoke runs remain the owner's.
+Tests: not re-run (no code changes).
+Next: owner reviews and merges #9 then #10; then whatever the owner unblocks (P3/P9 hold).
+Blockers / questions for owner: unchanged (see 2026-10-18). Third idle run in a row:
+please pause the nightly schedule or add tasks to ROADMAP.md.
+
+## 2026-10-19 (nightly, second run) — claude/nightly-2026-10-18-P11.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/10
+Done: nothing. Same state as the earlier 2026-10-19 run: every roadmap task is ticked or
+blocked/on hold ([!]), PRs #9 and #10 have no reviews or comments, and CI on #10's head is green.
+No empty PR opened; this entry is added to PR #10.
+Tests: not re-run (no code changes). CI on PR #10's head: checks ✓, postgres ✓.
+Next: owner reviews and merges #9 then #10; then whatever the owner unblocks (P3/P9 hold).
+Blockers / questions for owner: unchanged from the entries below (live smoke runs of the five
+Phase 11 spiders, Esteto categories, P3/P9 hold). Nightly runs stay idle until one of these
+moves: consider pausing the schedule.
+
+## 2026-10-19 (nightly) — claude/nightly-2026-10-18-P11.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/10
+Done: nothing. Every roadmap task is ticked or on hold/blocked ([!]), and PRs #9 and #10 have
+no review comments yet. I added this entry to PR #10 instead of opening an empty PR.
+- Re-checked the five new Phase 11 shops: the environment proxy still refuses the connection
+  (CONNECT 403), so the live `--limit 10` smoke runs are still not possible from the cloud.
+Tests: not re-run locally (no code changes; `pip install -e ".[dev]"` failed in this container
+while building the `jstyleson` wheel, a dependency of extruct). CI on PR #10's head is green (checks + postgres).
+Next: owner reviews and merges #9 then #10; live smoke runs; then whatever the owner unblocks (P3/P9 hold).
+Blockers / questions for owner:
+- Still open from 2026-10-18: live smoke runs for profihairshop, probeauty, beautylounge, esteto,
+  xpertbeauty (or allow those domains in the cloud environment); Esteto categories/pagination.
+- Nightly runs have no work until #9/#10 are reviewed or the P3/P9 hold is lifted: consider
+  pausing the schedule or adding tasks.
+
+## 2026-10-18 (nightly) — claude/nightly-2026-10-18-P11.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/10 (builds on #9)
+Done:
+- CI fix: selectolax 1.0 removed `selectolax.parser.HTMLParser` (PR #9 was red on mypy); switched
+  to the lexbor parser. Streamlit 1.66 AppTest returns query params as strings; UI test accepts both.
+- P11.1 Profihairshop spider (JSON-LD, products sitemap only; Crawl-delay 10 and apex→www tested).
+- P11.2 `ShopifySpider` base + ProBeauty and Beauty Lounge (h1 completes cut-short names).
+- P11.3 Esteto spider: walks `/produse-cosmetice` and `/parfumuri` listings (subcategories,
+  `?page=N`), no sort/filter URLs, capped.
+- P11.4 XpertBeauty spider: custom parser (analytics block, price boxes, EAN from JSON-LD mpn).
+- P11.5 Citrika (blocked), Farmacia Tei and Bebe Tei (not allowed) recorded; all shops seeded (17).
+- P2.6 (new, found during P11.3): robots.txt matching per RFC 9309; `urllib.robotparser` ignored
+  `*`/`$` wildcards and every `User-agent: *` group after the first.
+Tests: 800/800 passed, lint ✓, format ✓, mypy ✓ (src, scripts, tests)
+Next: owner's live smoke runs of the five new spiders; then whatever the owner unblocks (P3/P9 hold).
+Blockers / questions for owner:
+- The cloud environment can't reach any of the shops (proxy refuses the connection), so no live
+  smoke runs: please run `python -m beautycrawler.crawler run --retailer <slug> --limit 10` for
+  profihairshop, probeauty, beautylounge, esteto, xpertbeauty, or allow the domains.
+- Esteto: are `/produse-cosmetice` and `/parfumuri` the right categories? Pagination format guessed.
+- Profihairshop's Crawl-delay makes a full crawl ~3.6 h; `run --all` runs retailers one after another.
+
+## 2026-10-18 — claude/nightly-2026-10-18-P11-new-shops — (local session with the owner, not a nightly run)
+Done:
+- Carried over from PR #8 (merged before they were pushed): hide brands without listed products
+  (`/api/brands?unlisted=auto`), and the P3.1 audit of eMAG, Elefant, Sephora, Douglas, Makeup.ro.
+- Audited the owner's priority shops (Phase 11 in ROADMAP.md): Profihairshop, ProBeauty,
+  Beauty Lounge, Esteto, XpertBeauty work; Citrika blocked (Cloudflare); Farmacia Tei and
+  Bebe Tei disallow generic bots. Saved trimmed real pages (reviews removed) as fixtures.
+Tests: 687/687 passed, lint ✓, format ✓, mypy ✓
+Next: P11.1 Profihairshop spider (owner's priority), then P11.2–P11.5.
+Blockers / questions for owner: none for Phase 11 (fixtures are committed). Live smoke runs
+need the shops' domains in the cloud environment's allowed domains.
+
 ## 2026-09-28 — claude/nightly-2026-09-27-P10.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/8
 Done: nothing. Every open roadmap task (P3.x, P9.x) is on hold for the owner's data-source decision,
 and PR #8 has no review comments yet. I added this entry to PR #8 instead of opening an empty PR.
