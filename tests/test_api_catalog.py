@@ -152,3 +152,51 @@ def test_openapi_documents_all_endpoints(client: TestClient) -> None:
         if path.startswith("/api/"):
             ok = ops["get"]["responses"]["200"]["content"]["application/json"]["schema"]
             assert ok, path
+
+
+@pytest.mark.parametrize(
+    ("unlisted", "expected"),
+    [
+        (
+            None,
+            [
+                ("Avène", 0),
+                ("La Roche-Posay", 2),
+                ("L'Oréal Paris", 1),
+                ("L'Oréal Professionnel", 0),
+            ],
+        ),
+        (
+            "show",
+            [
+                ("Avène", 0),
+                ("La Roche-Posay", 2),
+                ("L'Oréal Paris", 1),
+                ("L'Oréal Professionnel", 0),
+            ],
+        ),
+        # Only La Roche-Posay has products with listings; L'Oréal's serum has none.
+        ("hide", [("La Roche-Posay", 2)]),
+        ("auto", [("La Roche-Posay", 2)]),
+    ],
+)
+def test_brands_unlisted(
+    client: TestClient, data: None, unlisted: str | None, expected: list[tuple[str, int]]
+) -> None:
+    params = {"unlisted": unlisted} if unlisted else {}
+    body = client.get("/api/brands", params=params).json()
+    assert [(b["name"], b["product_count"]) for b in body["items"]] == expected
+    assert body["total"] == len(expected)
+
+
+def test_brands_unlisted_auto_keeps_a_demo_only_catalogue(
+    client: TestClient, api_session: Session
+) -> None:
+    lrp = Brand(name="La Roche-Posay", normalized_name="la roche posay")
+    api_session.add(Product(brand=lrp, name="Effaclar Duo+", normalized_name="effaclar duo+"))
+    api_session.commit()
+    # No listings anywhere yet (demo data only): "auto" still shows every brand.
+    assert names(client.get("/api/brands", params={"unlisted": "auto"}).json()) == [
+        "La Roche-Posay"
+    ]
+    assert client.get("/api/brands", params={"unlisted": "hide"}).json()["total"] == 0

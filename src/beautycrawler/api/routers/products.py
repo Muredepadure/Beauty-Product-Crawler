@@ -53,6 +53,16 @@ class Unlisted(enum.StrEnum):
     AUTO = "auto"  # hide them once any product has a listing
 
 
+def hide_unlisted(session: Session, mode: "Unlisted") -> bool:
+    """Whether products (or brands) without listings should be left out."""
+    if mode is Unlisted.AUTO:
+        return (
+            session.scalar(select(Offer.id).where(Offer.product_id.is_not(None)).limit(1))
+            is not None
+        )
+    return mode is Unlisted.HIDE
+
+
 def search_words(q: str) -> list[str]:
     """Query words, folded; punctuation dropped ("L'Oréal Duo+" -> loreal, duo)."""
     return list(dict.fromkeys(_WORD.findall(fold(q).replace("'", ""))))
@@ -142,10 +152,7 @@ def list_products(
         conditions.append(stats.c.lowest_price <= max_price)
     if in_stock:
         conditions.append(stats.c.lowest_price.is_not(None))
-    if unlisted is Unlisted.HIDE or (
-        unlisted is Unlisted.AUTO
-        and session.scalar(select(Offer.id).where(Offer.product_id.is_not(None)).limit(1))
-    ):
+    if hide_unlisted(session, unlisted):
         conditions.append(stats.c.offer_count.is_not(None))
 
     base = (

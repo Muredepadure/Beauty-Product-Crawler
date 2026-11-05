@@ -123,8 +123,16 @@ class ApiClient:
     def list_retailers(self) -> list[RetailerOut]:
         return _RETAILERS.validate_python(self._get("/retailers"))
 
-    def list_brands(self, q: str | None = None, page: int = 1, page_size: int = 200) -> BrandPage:
-        return self._model(BrandPage, "/brands", {"q": q, "page": page, "page_size": page_size})
+    def list_brands(
+        self, q: str | None = None, page: int = 1, page_size: int = 200, unlisted: str = "show"
+    ) -> BrandPage:
+        params = {
+            "q": q,
+            "page": page,
+            "page_size": page_size,
+            "unlisted": None if unlisted == "show" else unlisted,
+        }
+        return self._model(BrandPage, "/brands", params)
 
     def compare(self, brand: str, page: int = 1, page_size: int = 100) -> BrandComparison:
         params = {"brand": brand, "page": page, "page_size": page_size}

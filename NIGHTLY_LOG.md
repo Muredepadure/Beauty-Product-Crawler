@@ -12,6 +12,18 @@ Blockers / questions for owner: <or "none">
 
 ---
 
+## 2026-10-18 — claude/nightly-2026-10-18-P11-new-shops — (local session with the owner, not a nightly run)
+Done:
+- Carried over from PR #8 (merged before they were pushed): hide brands without listed products
+  (`/api/brands?unlisted=auto`), and the P3.1 audit of eMAG, Elefant, Sephora, Douglas, Makeup.ro.
+- Audited the owner's priority shops (Phase 11 in ROADMAP.md): Profihairshop, ProBeauty,
+  Beauty Lounge, Esteto, XpertBeauty work; Citrika blocked (Cloudflare); Farmacia Tei and
+  Bebe Tei disallow generic bots. Saved trimmed real pages (reviews removed) as fixtures.
+Tests: 687/687 passed, lint ✓, format ✓, mypy ✓
+Next: P11.1 Profihairshop spider (owner's priority), then P11.2–P11.5.
+Blockers / questions for owner: none for Phase 11 (fixtures are committed). Live smoke runs
+need the shops' domains in the cloud environment's allowed domains.
+
 ## 2026-09-28 — claude/nightly-2026-09-27-P10.1 — PR https://github.com/Muredepadure/Beauty-Product-Crawler/pull/8
 Done: nothing. Every open roadmap task (P3.x, P9.x) is on hold for the owner's data-source decision,
 and PR #8 has no review comments yet. I added this entry to PR #8 instead of opening an empty PR.
