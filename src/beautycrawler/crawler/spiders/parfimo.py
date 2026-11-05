@@ -15,7 +15,7 @@ filter sitemaps, which are skipped. Product URLs end in `_z<id>/`.
 import re
 from urllib.parse import urljoin, urlsplit
 
-from selectolax.parser import HTMLParser
+from selectolax.lexbor import LexborHTMLParser as HTMLParser
 
 from beautycrawler.crawler.scraped import ScrapedOffer
 from beautycrawler.crawler.spider import JsonLdSpider, register

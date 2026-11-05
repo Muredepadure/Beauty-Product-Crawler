@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urljoin
 
-from selectolax.parser import HTMLParser
+from selectolax.lexbor import LexborHTMLParser as HTMLParser
 
 from beautycrawler.crawler.scraped import ScrapedOffer, normalize_gtin
 from beautycrawler.extractors.price import parse_machine_price
@@ -76,10 +76,32 @@ def iter_jsonld_objects(html: str) -> Iterator[JsonObj]:
         if not text:
             continue
         try:
-            data = json.loads(text, strict=False)  # tolerate raw newlines inside strings
+            data = loads_lenient(text)
         except json.JSONDecodeError:
             continue
         yield from _flatten(data)
+
+
+MAX_QUOTE_REPAIRS = 200
+
+
+def loads_lenient(text: str) -> Any:
+    """`json.loads` that tolerates two mistakes shops make in JSON-LD: raw newlines
+    inside strings, and unescaped double quotes inside strings (Profihairshop:
+    `"description": "... cu "henna neagra" pot ..."`). A quote that ends a string where
+    no `,` `:` `}` `]` follows is escaped and parsing is retried."""
+    for _ in range(MAX_QUOTE_REPAIRS):
+        try:
+            return json.loads(text, strict=False)
+        except json.JSONDecodeError as exc:
+            quote = text.rfind('"', 0, exc.pos)
+            delimiter_error = exc.msg.startswith(
+                ("Expecting ',' delimiter", "Expecting ':' delimiter")
+            )
+            if not delimiter_error or quote < 0 or text[quote + 1 : exc.pos].strip():
+                raise
+            text = text[:quote] + '\\"' + text[quote + 1 :]
+    return json.loads(text, strict=False)
 
 
 def _flatten(data: Any) -> Iterator[JsonObj]:

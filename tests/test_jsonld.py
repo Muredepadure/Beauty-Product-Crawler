@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -7,6 +8,7 @@ from beautycrawler.extractors.jsonld import (
     JsonLdProduct,
     extract_products,
     iter_jsonld_objects,
+    loads_lenient,
     to_scraped_offers,
 )
 
@@ -235,3 +237,23 @@ def test_single_offer_keeps_product_gtin_and_collapses_nbsp() -> None:
     )
     assert offer.title == "La Roche-Posay Cicaplast Gel B5 40 ml"  # was "40\xa0ml"
     assert (offer.price_bani, offer.ean) == (7500, "3337875586269")
+
+
+def test_unescaped_quotes_inside_a_string_are_repaired() -> None:
+    # Profihairshop: `"henna neagra"` written inside the description without escaping.
+    html = """<script type="application/ld+json">{"@context": "https://schema.org",
+      "@graph": [{"@type": "Product", "name": "Wella Color Touch 8/38 60 ml",
+        "description": "Tatuajele cu "henna neagra" pot creste riscul.\nNu va colorati.",
+        "brand": {"@type": "Brand", "name": "Wella Professionals"},
+        "offers": {"@type": "Offer", "price": "56.90", "priceCurrency": "RON",
+          "availability": "https://schema.org/InStock"}}]}</script>"""
+    [product] = extract_products(html)
+    assert (product.name, product.brand) == ("Wella Color Touch 8/38 60 ml", "Wella Professionals")
+    assert product.offers[0].price_bani == 5690
+
+
+def test_loads_lenient_keeps_valid_json_and_still_rejects_garbage() -> None:
+    assert loads_lenient('{"a": "say \\"hi\\"", "b": [1, 2]}') == {"a": 'say "hi"', "b": [1, 2]}
+    assert loads_lenient('{"a": "x "y" z"}') == {"a": 'x "y" z'}
+    with pytest.raises(json.JSONDecodeError):
+        loads_lenient('{"a": 1,, }')

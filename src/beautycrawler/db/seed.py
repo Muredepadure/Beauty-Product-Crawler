@@ -26,6 +26,13 @@ RETAILERS: tuple[tuple[str, str, str], ...] = (
     ("drmax", "Dr.Max", "drmax.ro"),
     ("parfimo", "Parfimo", "parfimo.ro"),
     ("elefant", "Elefant", "elefant.ro"),
+    ("profihairshop", "Profihairshop", "profihairshop.ro"),
+    ("probeauty", "ProBeauty", "probeauty.ro"),
+    ("beautylounge", "Beauty Lounge", "beauty-lounge.ro"),
+    ("esteto", "Esteto", "esteto.ro"),
+    ("xpertbeauty", "XpertBeauty", "xpertbeauty.ro"),
+    ("citrika", "Citrika", "citrika.ro"),
+    ("bebetei", "Bebe Tei", "bebetei.ro"),
 )
 
 # (brand, product name, size, unit, category)
