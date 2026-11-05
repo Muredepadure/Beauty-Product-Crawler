@@ -112,6 +112,11 @@ class BrandOut(BaseModel):
     product_count: int
 
 
+class CategoryOut(BaseModel):
+    name: str
+    product_count: int
+
+
 class BrandPage(BaseModel):
     total: int = Field(description="Matches across all pages")
     page: int

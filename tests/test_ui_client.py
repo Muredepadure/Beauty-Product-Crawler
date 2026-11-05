@@ -176,3 +176,20 @@ def test_brand_unlisted_mode_is_passed_through(
     listed = [b.name for b in api.list_brands(unlisted="auto").items]
     assert "Demo Brand" in all_brands
     assert "Demo Brand" not in listed and listed
+
+
+def test_all_brand_names_pages_through_the_api(api: ApiClient, api_session: Session) -> None:
+    api_session.add_all(
+        Brand(name=f"Brand {i:03}", normalized_name=f"brand {i:03}") for i in range(450)
+    )
+    api_session.commit()
+    names = api.all_brand_names()
+    assert len(names) == 450  # three pages of at most 200
+    assert names[0] == "Brand 000" and names[-1] == "Brand 449"
+
+
+def test_list_categories(api: ApiClient, api_session: Session) -> None:
+    api_session.add(Product(name="x", normalized_name="x", category="Balsam"))
+    api_session.commit()
+    [category] = api.list_categories()
+    assert (category.name, category.product_count) == ("Balsam", 1)

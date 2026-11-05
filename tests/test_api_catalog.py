@@ -200,3 +200,40 @@ def test_brands_unlisted_auto_keeps_a_demo_only_catalogue(
         "La Roche-Posay"
     ]
     assert client.get("/api/brands", params={"unlisted": "hide"}).json()["total"] == 0
+
+
+def test_categories(client: TestClient, api_session: Session) -> None:
+    s = api_session
+    shop = Retailer(slug="shop", name="Shop", domain="shop.ro")
+    products = [
+        Product(name="a", normalized_name="a", category="Parfumuri"),
+        Product(name="b", normalized_name="b", category="Parfumuri"),
+        Product(name="c", normalized_name="c", category="Șampon"),
+        Product(name="d", normalized_name="d", category="Altele"),
+        Product(name="e", normalized_name="e", category="Curățare"),  # not a known category
+        Product(name="f", normalized_name="f"),  # no category
+    ]
+    s.add_all([shop, *products])
+    s.add(
+        Offer(
+            retailer=shop,
+            product=products[0],
+            url="https://shop.ro/a",
+            title="a",
+            price_bani=1_000,
+            in_stock=True,
+        )
+    )
+    s.commit()
+    body = client.get("/api/categories").json()
+    # Known categories in their fixed order, "Altele" last of them, then the others.
+    assert body == [
+        {"name": "Șampon", "product_count": 1},
+        {"name": "Parfumuri", "product_count": 2},
+        {"name": "Altele", "product_count": 1},
+        {"name": "Curățare", "product_count": 1},
+    ]
+    # Once listings exist, "auto" counts only listed products.
+    assert client.get("/api/categories", params={"unlisted": "auto"}).json() == [
+        {"name": "Parfumuri", "product_count": 1}
+    ]

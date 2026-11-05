@@ -145,6 +145,7 @@ python -m beautycrawler.matching run              # link unmatched offers (EAN, 
 python -m beautycrawler.matching list             # ambiguous matches waiting for review
 python -m beautycrawler.matching approve 12       # offer of candidate #12 -> its product
 python -m beautycrawler.matching reject 12 13     # different products; re-match the offer
+python -m beautycrawler.matching categorize        # give products without a category one (from the name)
 ```
 
 Offers are linked by EAN/GTIN when possible, otherwise by brand + name + size. A name

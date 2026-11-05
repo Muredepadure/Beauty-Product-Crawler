@@ -1,4 +1,4 @@
-"""Reference lists: `GET /api/retailers` and `GET /api/brands`."""
+"""Reference lists: `GET /api/retailers`, `GET /api/brands` and `GET /api/categories`."""
 
 from typing import Annotated
 
@@ -8,8 +8,9 @@ from sqlalchemy.orm import Session
 
 from beautycrawler.api.deps import get_session
 from beautycrawler.api.routers.products import Unlisted, hide_unlisted, search_words
-from beautycrawler.api.schemas import BrandOut, BrandPage, RetailerOut
+from beautycrawler.api.schemas import BrandOut, BrandPage, CategoryOut, RetailerOut
 from beautycrawler.db.models import Brand, Offer, Product, Retailer
+from beautycrawler.normalization.categories import CATEGORIES
 
 router = APIRouter(tags=["catalog"])
 
@@ -102,3 +103,28 @@ def list_brands(
         BrandOut(id=r.Brand.id, name=r.Brand.name, product_count=r.product_count or 0) for r in rows
     ]
     return BrandPage(total=total, page=page, page_size=page_size, items=items)
+
+
+@router.get("/categories", response_model=list[CategoryOut])
+def list_categories(
+    session: Annotated[Session, Depends(get_session)],
+    unlisted: Annotated[
+        Unlisted,
+        Query(description="Products without listings: show, hide, or auto (as /api/products)"),
+    ] = Unlisted.SHOW,
+) -> list[CategoryOut]:
+    """Categories that have products, with how many: the known categories in their
+    fixed order (`normalization.categories.CATEGORIES`), then any others by name."""
+    query = select(Product.category, func.count(func.distinct(Product.id))).where(
+        Product.category.is_not(None)
+    )
+    if hide_unlisted(session, unlisted):
+        query = query.join(Offer, Offer.product_id == Product.id)
+    counts = {
+        name: n
+        for name, n in session.execute(query.group_by(Product.category)).tuples()
+        if name is not None
+    }
+    order = {name: i for i, name in enumerate(CATEGORIES)}
+    names = sorted(counts, key=lambda n: (order.get(n, len(order)), n.casefold()))
+    return [CategoryOut(name=n, product_count=counts[n]) for n in names]
