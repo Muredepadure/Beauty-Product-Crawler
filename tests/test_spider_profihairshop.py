@@ -10,7 +10,10 @@ from conftest import FakeTime
 from beautycrawler.config import Settings
 from beautycrawler.crawler.fetcher import PoliteFetcher
 from beautycrawler.crawler.runner import load_spiders
-from beautycrawler.crawler.spiders.profihairshop import ProfihairshopSpider
+from beautycrawler.crawler.spiders.profihairshop import (
+    ProfihairshopSpider,
+    parse_brand_page,
+)
 
 BASE = "https://www.profihairshop.ro"
 APEX = "https://profihairshop.ro"
@@ -139,6 +142,7 @@ async def test_crawl_uses_only_the_products_sitemap_and_honours_crawl_delay(
         return respond
 
     mock.get(f"{BASE}/robots.txt").mock(side_effect=serve(ROBOTS))
+    mock.get(f"{BASE}/brands-sitemap.xml").mock(side_effect=serve(urlset()))
     mock.get(f"{BASE}/sitemap-index.xml").mock(
         side_effect=serve(
             index(
@@ -160,11 +164,11 @@ async def test_crawl_uses_only_the_products_sitemap_and_honours_crawl_delay(
 
     assert [(o.url, o.price_bani) for o in offers] == [(DYE_CANONICAL, 5790), (GIFT, 3490)]
     assert not any(route.called for route in skipped)
-    # robots.txt, index, products sitemap, two pages: after robots.txt, every request
-    # to the host waits for the site's Crawl-delay (10 s), not our 2 s default.
+    # robots.txt, brands sitemap, index, products sitemap, two pages: after robots.txt,
+    # every request to the host waits for the site's Crawl-delay (10 s), not our 2 s default.
     times = [t for _, t in requested_at]
-    assert len(times) == 5
-    assert [b - a for a, b in pairwise(times)] == [10.0] * 4
+    assert len(times) == 6
+    assert [b - a for a, b in pairwise(times)] == [10.0] * 5
 
 
 async def test_apex_domain_redirects_to_www(
@@ -173,6 +177,7 @@ async def test_apex_domain_redirects_to_www(
     # robots.txt and sitemaps listed on the apex domain redirect to www.
     mock.get(f"{BASE}/robots.txt").mock(return_value=httpx.Response(200, text=ROBOTS))
     mock.get(f"{APEX}/robots.txt").mock(return_value=redirect(f"{BASE}/robots.txt"))
+    mock.get(f"{BASE}/brands-sitemap.xml").mock(return_value=httpx.Response(200, text=urlset()))
     mock.get(f"{BASE}/sitemap-index.xml").mock(
         return_value=httpx.Response(200, text=index(f"{APEX}/products-sitemap.xml"))
     )
@@ -202,3 +207,110 @@ def test_page_key_ignores_the_category_path() -> None:
     assert spider.page_key(sitemap) != spider.page_key(
         "https://www.profihairshop.ro/copii/martinelia-magic-ballet-set-manichiura-mini-copii"
     )
+
+
+# --- discovery through the brand pages (the products sitemap is out of date) -----------
+
+WELLA = f"{BASE}/marci/wella-professionals"
+ORLY = f"{BASE}/marci/orly"
+
+
+def card(path: str) -> str:
+    return f'<div class="product-card"><h3><a href="{path}">x</a></h3></div>'
+
+
+def page_links(brand: str, *numbers: int) -> str:
+    return "".join(f'<a href="/marci/{brand}?page={n}&per-page=24">{n}</a>' for n in numbers)
+
+
+def serve_brands(mock: respx.MockRouter) -> list[respx.Route]:
+    mock.get(f"{BASE}/robots.txt").mock(return_value=httpx.Response(200, text=ROBOTS))
+    mock.get(f"{BASE}/brands-sitemap.xml").mock(
+        return_value=httpx.Response(200, text=urlset(WELLA, ORLY))
+    )
+    routes = []
+    for url, number, body in (
+        # A card without the brand in its slug, and a repeat of the same product.
+        (WELLA, 1, card("/par/a-1") + card("/par/noname-2") + page_links("wella-professionals", 2)),
+        (
+            WELLA,
+            2,
+            card("/par/other/a-1") + card("/par/a-3") + page_links("wella-professionals", 1),
+        ),
+        (ORLY, 1, card("/par/orly-4")),
+    ):
+        routes.append(
+            mock.get(url, params={"page": str(number), "per-page": "24"}).mock(
+                return_value=httpx.Response(200, text=body)
+            )
+        )
+    return routes
+
+
+def test_parse_brand_page() -> None:
+    url = f"{WELLA}?page=8&per-page=24"
+    urls, last = parse_brand_page(load("brand_page.html"), url)
+    assert len(urls) == 3
+    assert urls[0].startswith(f"{BASE}/par/ingrijirea-parului/")
+    assert last == 8  # the sort link's page=99 doesn't count, nor do navigation links
+    assert parse_brand_page("<html></html>", url) == ([], 1)
+
+
+async def test_brand_filter_walks_only_those_brand_pages(
+    settings: Settings, fake_time: FakeTime, mock: respx.MockRouter
+) -> None:
+    routes = serve_brands(mock)
+    products_sitemap = mock.get(f"{BASE}/sitemap-index.xml")
+    async with PoliteFetcher(settings, sleep=fake_time.sleep, clock=fake_time.clock) as f:
+        spider = ProfihairshopSpider(f, brands=("wella",))
+        urls = [u async for u in spider.discover()]
+    assert urls == [f"{BASE}/par/a-1", f"{BASE}/par/noname-2", f"{BASE}/par/a-3"]
+    assert not routes[2].called  # another brand's page
+    assert not products_sitemap.called
+
+
+async def test_brand_pages_respect_limit_and_skip_urls(
+    settings: Settings, fake_time: FakeTime, mock: respx.MockRouter
+) -> None:
+    serve_brands(mock)
+    async with PoliteFetcher(settings, sleep=fake_time.sleep, clock=fake_time.clock) as f:
+        spider = ProfihairshopSpider(f, brands=("wella",))
+        spider.skip_urls = frozenset({spider.page_key(f"{BASE}/x/a-1")})
+        assert [u async for u in spider.discover(limit=1)] == [f"{BASE}/par/noname-2"]
+        assert spider.skipped_seen == 1
+
+
+async def test_without_a_filter_the_sitemap_adds_what_brand_pages_lack(
+    settings: Settings, fake_time: FakeTime, mock: respx.MockRouter
+) -> None:
+    serve_brands(mock)
+    mock.get(f"{BASE}/sitemap-index.xml").mock(
+        return_value=httpx.Response(200, text=index(f"{BASE}/products-sitemap.xml"))
+    )
+    mock.get(f"{BASE}/products-sitemap.xml").mock(
+        return_value=httpx.Response(200, text=urlset(f"{BASE}/old/a-1", f"{BASE}/par/only-here"))
+    )
+    async with PoliteFetcher(settings, sleep=fake_time.sleep, clock=fake_time.clock) as f:
+        urls = [u async for u in ProfihairshopSpider(f).discover()]
+    assert urls == [
+        f"{BASE}/par/a-1",
+        f"{BASE}/par/noname-2",
+        f"{BASE}/par/a-3",
+        f"{BASE}/par/orly-4",
+        f"{BASE}/par/only-here",  # /old/a-1 is the same product as /par/a-1
+    ]
+
+
+async def test_unreadable_brand_sitemap_falls_back_to_the_products_sitemap(
+    settings: Settings, fake_time: FakeTime, mock: respx.MockRouter
+) -> None:
+    mock.get(f"{BASE}/robots.txt").mock(return_value=httpx.Response(200, text=ROBOTS))
+    mock.get(f"{BASE}/brands-sitemap.xml").mock(return_value=httpx.Response(404))
+    mock.get(f"{BASE}/sitemap-index.xml").mock(
+        return_value=httpx.Response(200, text=index(f"{BASE}/products-sitemap.xml"))
+    )
+    mock.get(f"{BASE}/products-sitemap.xml").mock(
+        return_value=httpx.Response(200, text=urlset(DYE))
+    )
+    async with PoliteFetcher(settings, sleep=fake_time.sleep, clock=fake_time.clock) as f:
+        assert [u async for u in ProfihairshopSpider(f).discover()] == [DYE]

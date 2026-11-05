@@ -5,6 +5,7 @@
     python -m beautycrawler.crawler run --all [--limit N]
     python -m beautycrawler.crawler run --all --due      # hourly cron entry point
     python -m beautycrawler.crawler schedule [--retailer SLUG --every-hours N]
+    python -m beautycrawler.crawler coverage --retailer A [--retailer B] [--only-brands B1,B2]
 
 Options for `run`: `--due` skips retailers crawled within their interval;
 `--match` links offers to products before the crawl (left over from an interrupted run),
@@ -15,7 +16,9 @@ while the run lasts; `--only-brands wella,loreal` fetches only those brands' pro
 marked inactive in the database. `--log-format json` (before the command) gives one JSON
 log object per line. Exit code 1 when any retailer failed.
 
-The database schema must exist (`alembic upgrade head`).
+`coverage` compares what each shop's site lists now with the database (no product page
+is fetched) and, for two retailers, their shared barcodes. The database schema must exist
+(`alembic upgrade head`).
 """
 
 import argparse
@@ -32,8 +35,10 @@ from sqlalchemy.orm import Session
 
 from beautycrawler.config import get_settings
 from beautycrawler.crawler.awake import keep_awake
+from beautycrawler.crawler.coverage import barcode_overlap, site_coverage
 from beautycrawler.crawler.fetcher import PoliteFetcher
 from beautycrawler.crawler.runner import RunReport, load_spiders, next_due, run_many
+from beautycrawler.crawler.spider import get_spider
 from beautycrawler.db.models import Retailer
 from beautycrawler.db.session import make_engine, make_session_factory
 from beautycrawler.logs import configure_logging
@@ -104,6 +109,12 @@ def build_parser() -> argparse.ArgumentParser:
         "not reached are skipped",
     )
 
+    coverage = sub.add_parser("coverage", help="compare shops' sites with the database")
+    coverage.add_argument("--retailer", action="append", metavar="SLUG", required=True)
+    coverage.add_argument("--only-brands", metavar="B1,B2", help="only these brands' products")
+    coverage.add_argument("--show-missing", type=int, default=10, metavar="N", help="URLs to list")
+    coverage.add_argument("--database-url", help="override DATABASE_URL")
+
     schedule = sub.add_parser("schedule", help="show or set per-retailer crawl intervals")
     schedule.add_argument("--retailer", metavar="SLUG", help="retailer to change")
     schedule.add_argument("--every-hours", type=int, metavar="N", help="new interval (hours)")
@@ -149,6 +160,29 @@ def _schedule(args: argparse.Namespace) -> int:
     finally:
         engine.dispose()
     return 0
+
+
+def _brands(value: str | None) -> tuple[str, ...]:
+    return tuple(b.strip() for b in (value or "").split(",") if b.strip())
+
+
+async def _coverage(args: argparse.Namespace, fetcher_factory: FetcherFactory) -> None:
+    slugs = list(dict.fromkeys(args.retailer))
+    engine = make_engine(args.database_url)
+    try:
+        with make_session_factory(engine)() as session:
+            async with fetcher_factory() as fetcher:
+                for slug in slugs:
+                    spider = get_spider(slug)(fetcher, brands=_brands(args.only_brands))
+                    report = await site_coverage(spider, session)
+                    print(report.line())
+                    for url in report.missing[: args.show_missing]:
+                        print(f"  missing: {url}")
+            for i, first in enumerate(slugs):
+                for second in slugs[i + 1 :]:
+                    print(barcode_overlap(session, first, second).line())
+    finally:
+        engine.dispose()
 
 
 async def _run(
@@ -210,6 +244,13 @@ def main(argv: list[str] | None = None, fetcher_factory: FetcherFactory | None =
         return 0
     if args.command == "schedule":
         return _schedule(args)
+    if args.command == "coverage":
+        unknown = [s for s in args.retailer if s not in spiders]
+        if unknown:
+            print(f"Unknown retailer(s): {', '.join(unknown)}", file=sys.stderr)
+            return 2
+        asyncio.run(_coverage(args, fetcher_factory or (lambda: PoliteFetcher(get_settings()))))
+        return 0
 
     if args.limit is not None and args.limit < 1:
         print("--limit must be >= 1", file=sys.stderr)
@@ -222,7 +263,7 @@ def main(argv: list[str] | None = None, fetcher_factory: FetcherFactory | None =
     except ValueError:
         print("--until must be a time like 07:00 or 2026-10-30T07:00", file=sys.stderr)
         return 2
-    args.brands = tuple(b.strip() for b in (args.only_brands or "").split(",") if b.strip())
+    args.brands = _brands(args.only_brands)
     slugs = sorted(spiders) if args.all else list(dict.fromkeys(args.retailer))
     unknown = [s for s in slugs if s not in spiders]
     if unknown:
